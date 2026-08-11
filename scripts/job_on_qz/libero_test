@@ -1,0 +1,78 @@
+#!/bin/bash
+#SBATCH --job-name=openpi-libero
+#SBATCH --gres=gpu:1
+#SBATCH --cpus-per-task=12
+#SBATCH --mem=64G
+#SBATCH --time=12:00:00
+#SBATCH --output=libero-%j.out
+
+set -euo pipefail
+
+OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi
+cd "${OPENPI_ROOT}"
+
+# Override these values with: sbatch --export=ALL,NAME=value,...
+POLICY_CONFIG=${POLICY_CONFIG:-pi05_libero}
+POLICY_DIR=${POLICY_DIR:-gs://openpi-assets/checkpoints/pi05_libero}
+TASK_SUITE=${TASK_SUITE:-libero_spatial}
+NUM_TRIALS=${NUM_TRIALS:-50}
+POLICY_PORT=${POLICY_PORT:-$((20000 + SLURM_JOB_ID % 20000))}
+VIDEO_OUT_PATH=${VIDEO_OUT_PATH:-data/libero/videos/${SLURM_JOB_ID}}
+
+export MUJOCO_GL=${MUJOCO_GL:-egl}
+export PYOPENGL_PLATFORM=${PYOPENGL_PLATFORM:-egl}
+export MUJOCO_EGL_DEVICE_ID=${MUJOCO_EGL_DEVICE_ID:-0}
+
+# Leave GPU memory available for MuJoCo's EGL renderer.
+export XLA_PYTHON_CLIENT_PREALLOCATE=false
+
+echo "Starting policy server on port ${POLICY_PORT}"
+echo "Policy config: ${POLICY_CONFIG}"
+echo "Checkpoint: ${POLICY_DIR}"
+
+uv run scripts/serve_policy.py \
+    --port "${POLICY_PORT}" \
+    policy:checkpoint \
+    --policy.config "${POLICY_CONFIG}" \
+    --policy.dir "${POLICY_DIR}" &
+
+POLICY_SERVER_PID=$!
+
+cleanup() {
+    kill "${POLICY_SERVER_PID}" 2>/dev/null || true
+    wait "${POLICY_SERVER_PID}" 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+# Wait up to five minutes for model loading to finish.
+SERVER_READY=0
+for _ in {1..300}; do
+    if ! kill -0 "${POLICY_SERVER_PID}" 2>/dev/null; then
+        echo "Policy server exited during startup" >&2
+        wait "${POLICY_SERVER_PID}"
+        exit 1
+    fi
+
+    if (echo > /dev/tcp/127.0.0.1/"${POLICY_PORT}") 2>/dev/null; then
+        SERVER_READY=1
+        break
+    fi
+    sleep 1
+done
+
+if [[ "${SERVER_READY}" -ne 1 ]]; then
+    echo "Timed out waiting for policy server" >&2
+    exit 1
+fi
+
+source examples/libero/.venv/bin/activate
+export PYTHONPATH="${PYTHONPATH:-}:${OPENPI_ROOT}/third_party/libero"
+
+echo "Starting ${TASK_SUITE} evaluation with ${NUM_TRIALS} trials per task"
+
+python examples/libero/main.py \
+    --args.host 127.0.0.1 \
+    --args.port "${POLICY_PORT}" \
+    --args.task-suite-name "${TASK_SUITE}" \
+    --args.num-trials-per-task "${NUM_TRIALS}" \
+    --args.video-out-path "${VIDEO_OUT_PATH}"
