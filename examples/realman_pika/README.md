@@ -1,26 +1,18 @@
 # RealMan + Pika hardware client
 
-This client connects the RealMan-Pika hardware implementation from the sibling
-LeRobot repository to an OpenPI websocket policy server.
+This client connects the RealMan-Pika hardware implementation to an OpenPI
+websocket policy server. The policy server and robot client intentionally use
+separate Python environments: OpenPI requires Python 3.11 and NumPy 1.x, while
+the RealMan-Pika LeRobot driver requires Python 3.12 and NumPy 2.x.
 
-The required robot implementation currently lives on the `myfork/main` branch
-of the LeRobot repository. Use that checkout on the robot computer and install
-the small runtime dependencies:
-
-```bash
-cd /path/to/lerobot
-git switch main
-git pull myfork main
-pip install -e '.[intelrealsense]'
-pip install tyro scipy websockets msgpack
-```
-
-`openpi-client` currently pins NumPy below version 2 while recent LeRobot pins
-NumPy 2. To avoid changing the working robot environment, expose the client
-source directly instead of installing its package:
+The client project pins the robot driver to a reproducible commit in
+`Zehao-Du/lerobot`; a sibling LeRobot checkout and `PYTHONPATH` are not needed.
+On the robot computer, clone this OpenPI repository and create the client
+environment:
 
 ```bash
-export PYTHONPATH=/path/to/openpi/packages/openpi-client/src:/path/to/lerobot/src:$PYTHONPATH
+cd /path/to/openpi
+uv sync --project examples/realman_pika
 ```
 
 Start the OpenPI policy server on the inference computer using the Pika training
@@ -35,7 +27,7 @@ uv run scripts/serve_policy.py policy:checkpoint \
 On the robot computer, first run one query without executing any action:
 
 ```bash
-python examples/realman_pika/main.py \
+uv run --project examples/realman_pika python examples/realman_pika/main.py \
   --host <policy-server-ip> \
   --prompt "pick all blocks into the drawer"
 ```
@@ -44,7 +36,7 @@ Inspect the printed action chunk. Then explicitly enable execution; every chunk
 still requires terminal confirmation by default:
 
 ```bash
-python examples/realman_pika/main.py \
+uv run --project examples/realman_pika python examples/realman_pika/main.py \
   --host <policy-server-ip> \
   --prompt "pick all blocks into the drawer" \
   --execute
@@ -59,10 +51,9 @@ Camera and state mapping:
 
 - Pika fisheye → `observation/image`
 - RealSense RGB → `observation/wrist_image`
-- `eef_{x,y,z,rx,ry,rz}.pos` plus `gripper.pos` → `observation/state`
+- RealMan TCP `eef_{x,y,z,rx,ry,rz}.pos` is converted to an absolute Pika
+  gripper rotvec pose; `gripper.pos` is appended to form `observation/state`.
 
-The robot driver exposes TCP state relative to the pose captured at connection,
-whereas the current converted training dataset stores absolute localization
-poses. This representation mismatch must be resolved before evaluating policy
-quality; query-only mode is intended to validate transport and shape contracts
-first.
+The robot observation must expose an absolute RealMan TCP pose in the same
+base/world frame used by the training data. The client applies the fixed
+RealMan-TCP-to-Pika-gripper extrinsic before sending the state to the policy.

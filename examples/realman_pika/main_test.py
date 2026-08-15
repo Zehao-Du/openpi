@@ -60,15 +60,19 @@ def _wait_until_server_is_ready(port: int, timeout: float = 5.0) -> None:
 
 
 def test_make_policy_request_maps_realman_pika_observation() -> None:
+    realman_tcp_pose = np.array([0.42, -0.18, 0.31, 0.1, -0.2, 0.3])
     observation = {
-        **{key: float(index) for index, key in enumerate(main.STATE_ACTION_KEYS)},
+        **{key: float(value) for key, value in zip(main.STATE_ACTION_KEYS[:6], realman_tcp_pose, strict=True)},
+        "gripper.pos": 0.04,
         "fisheye": np.zeros((8, 12, 3), dtype=np.uint8),
         "rgb": np.full((8, 12, 3), 255, dtype=np.uint8),
     }
 
     request = main.make_policy_request(observation, "pick the block", resize_size=4)
 
-    np.testing.assert_array_equal(request["observation/state"], np.arange(7, dtype=np.float32))
+    expected_pika_pose = main.realman_tcp_pose_to_pika_gripper_pose(realman_tcp_pose)
+    np.testing.assert_allclose(request["observation/state"][:6], expected_pika_pose, rtol=1e-6)
+    assert request["observation/state"][6] == np.float32(0.04)
     assert request["observation/image"].shape == (4, 4, 3)
     assert request["observation/wrist_image"].shape == (4, 4, 3)
     assert request["prompt"] == "pick the block"

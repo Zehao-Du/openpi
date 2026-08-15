@@ -24,14 +24,16 @@ import h5py
 from lerobot.common.datasets.lerobot_dataset import HF_LEROBOT_HOME
 from lerobot.common.datasets.lerobot_dataset import LeRobotDataset
 import numpy as np
+from openpi_client import image_tools
 from PIL import Image
 from scipy.spatial.transform import Rotation
 from tqdm.auto import tqdm
 import tyro
 
-REPO_NAME = "Zehao123/pika_collect_blocks"
+REPO_NAME = "Zehao123/pika_collect_blocks_224_224"
 TASK_PROMPT = "pick all blocks into the drawer"
 FPS = 30
+IMAGE_SIZE = 224
 
 TCP_KEY = "localization/pose/pika"
 GRIPPER_KEY = "gripper/encoderDistance/pika"
@@ -71,7 +73,8 @@ def _read_rgb(episode_dir: Path, value: object) -> np.ndarray:
     if not image_path.is_file():
         raise FileNotFoundError(image_path)
     with Image.open(image_path) as image:
-        return np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+        rgb = np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
+    return image_tools.resize_with_pad(rgb, IMAGE_SIZE, IMAGE_SIZE)
 
 
 def _read_state(file: h5py.File, *, test_mode: bool = False) -> np.ndarray:
@@ -101,14 +104,16 @@ def _read_state(file: h5py.File, *, test_mode: bool = False) -> np.ndarray:
 
 
 def main(data_dir: str, *, push_to_hub: bool = False, test_mode: bool = False):
+    # resolve data path and episode path
     data_path = Path(data_dir).expanduser()
     if not data_path.is_absolute():
         raise ValueError(f"--data-dir must be an absolute path, got: {data_dir}")
     data_path = data_path.resolve()
     if not data_path.is_dir():
         raise NotADirectoryError(data_path)
-
     episode_dirs = _find_episode_dirs(data_path, test_mode=test_mode)
+
+    # for debug
     if test_mode:
         print("\nValidating state arrays:")
         for episode_dir in episode_dirs:
@@ -134,17 +139,17 @@ def main(data_dir: str, *, push_to_hub: bool = False, test_mode: bool = False):
     # LeRobot assumes that dtype of image data is `image`
     dataset = LeRobotDataset.create(
         repo_id=REPO_NAME,
-        robot_type="realman with pika",
+        robot_type="realman arm with pika gripper",
         fps=FPS,
         features={
             "image": {
                 "dtype": "image",  # Fisheye image: primary/global view.
-                "shape": (480, 640, 3),
+                "shape": (IMAGE_SIZE, IMAGE_SIZE, 3),
                 "names": ["height", "width", "channel"],
             },
             "wrist_image": {
                 "dtype": "image",  # Depth camera RGB: narrow wrist view.
-                "shape": (480, 640, 3),
+                "shape": (IMAGE_SIZE, IMAGE_SIZE, 3),
                 "names": ["height", "width", "channel"],
             },
             "state": {

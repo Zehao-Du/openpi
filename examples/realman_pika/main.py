@@ -14,6 +14,7 @@ import pathlib
 import time
 from typing import Any, Literal
 
+from lerobot.robots.realman_pika.transforms import realman_tcp_pose_to_pika_gripper_pose
 import numpy as np
 from openpi_client import image_tools
 from openpi_client import websocket_client_policy
@@ -67,13 +68,24 @@ class Args:
     gripper_action_latency: float = 0.0
 
 
-def _state_from_observation(observation: dict[str, Any]) -> np.ndarray:
-    missing = [key for key in STATE_ACTION_KEYS if key not in observation]
+def _realman_tcp_pose_from_observation(observation: dict[str, Any]) -> np.ndarray:
+    missing = [key for key in STATE_ACTION_KEYS[:6] if key not in observation]
     if missing:
-        raise KeyError(f"RealmanPika observation is missing state keys: {missing}")
-    state = np.asarray([observation[key] for key in STATE_ACTION_KEYS], dtype=np.float32)
+        raise KeyError(f"RealmanPika observation is missing TCP pose keys: {missing}")
+    tcp_pose = np.asarray([observation[key] for key in STATE_ACTION_KEYS[:6]], dtype=np.float64)
+    if tcp_pose.shape != (6,) or not np.isfinite(tcp_pose).all():
+        raise ValueError(f"Expected a finite 6D RealMan TCP pose, got {tcp_pose}")
+    return tcp_pose
+
+
+def _state_from_observation(observation: dict[str, Any]) -> np.ndarray:
+    if STATE_ACTION_KEYS[6] not in observation:
+        raise KeyError(f"RealmanPika observation is missing state key: {STATE_ACTION_KEYS[6]}")
+    realman_tcp_pose = _realman_tcp_pose_from_observation(observation)
+    pika_pose = realman_tcp_pose_to_pika_gripper_pose(realman_tcp_pose)
+    state = np.concatenate([pika_pose, np.asarray([observation[STATE_ACTION_KEYS[6]]])]).astype(np.float32)
     if state.shape != (7,) or not np.isfinite(state).all():
-        raise ValueError(f"Expected a finite 7D RealmanPika state, got {state}")
+        raise ValueError(f"Expected a finite 7D Pika state, got {state}")
     return state
 
 
@@ -85,6 +97,7 @@ def _prepare_image(image: Any, resize_size: int) -> np.ndarray:
 
 
 def make_policy_request(observation: dict[str, Any], prompt: str, resize_size: int) -> dict[str, Any]:
+    # input realman tcp pose
     missing_images = [key for key in ("fisheye", "rgb") if key not in observation]
     if missing_images:
         raise KeyError(f"RealmanPika observation is missing camera keys: {missing_images}")
@@ -94,7 +107,7 @@ def make_policy_request(observation: dict[str, Any], prompt: str, resize_size: i
     return {
         "observation/image": _prepare_image(observation["fisheye"], resize_size),
         "observation/wrist_image": _prepare_image(observation["rgb"], resize_size),
-        "observation/state": _state_from_observation(observation),
+        "observation/state": _state_from_observation(observation),  # convert realman tcp pose to pika pose
         "prompt": prompt,
     }
 
@@ -181,13 +194,6 @@ def _confirm_chunk() -> bool:
 
 
 def run(args: Args) -> None:
-    if args.resize_size <= 0:
-        raise ValueError("resize_size must be positive")
-    if args.replan_steps <= 0 or args.max_steps <= 0:
-        raise ValueError("replan_steps and max_steps must be positive")
-    if args.control_hz <= 0:
-        raise ValueError("control_hz must be positive")
-
     client = websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
     logging.info("Policy server metadata: %s", client.get_server_metadata())
     robot = _create_robot(args)
@@ -198,13 +204,16 @@ def run(args: Args) -> None:
         logging.info("RealMan-Pika connected. execute=%s", args.execute)
 
         while executed_steps < args.max_steps:
+            # get obesrvation
             observation = robot.get_observation()
+            realman_tcp_pose = _realman_tcp_pose_from_observation(observation)
+            # repack into policy input
             request = make_policy_request(observation, args.prompt, args.resize_size)
-            state = request["observation/state"]
+            pika_state = request["observation/state"]
             action_chunk = _validate_action_chunk(client.infer(request)["actions"])
 
             if args.server_action_mode == "absolute":
-                robot_action_chunk = absolute_chunk_to_local_delta(action_chunk, state)
+                robot_action_chunk = absolute_chunk_to_local_delta(action_chunk, pika_state)
             else:
                 robot_action_chunk = action_chunk
 
@@ -214,7 +223,7 @@ def run(args: Args) -> None:
                 f"Robot-local actions to execute ({steps_this_chunk} steps):\n{robot_action_chunk[:steps_this_chunk]}"
             )
 
-            if not args.execute:
+            if not args.execute:  # debug
                 logging.info("Query-only mode: no action was sent to the robot.")
                 return
             if args.confirm_each_chunk and not _confirm_chunk():
@@ -223,7 +232,7 @@ def run(args: Args) -> None:
 
             # Every action in the predicted chunk is relative to the state sent
             # to the policy, so freeze exactly that hardware pose as the origin.
-            robot.set_action_reference_from_state(state)
+            robot.set_action_reference_from_realman_tcp_pose(realman_tcp_pose)
             try:
                 for action in robot_action_chunk[:steps_this_chunk]:
                     robot.send_action(action_to_robot_dict(action))

@@ -72,6 +72,7 @@ dlimp = { git = "https://github.com/kvablack/dlimp", rev = "ad72ce3a9b414db2185b
 
 [tool.uv.workspace]
 members = ["packages/*"]
+exclude = ["examples/realman_pika"]
 
 [tool.ruff]
 line-length = 120

@@ -1,0 +1,17 @@
+[project]
+name = "openpi-realman-pika-client"
+version = "0.1.0"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "lerobot[intelrealsense]",
+    "openpi-client",
+    "scipy>=1.14.0",
+    "tyro>=0.9.5",
+]
+
+[tool.uv.sources]
+lerobot = { git = "https://github.com/Zehao-Du/lerobot.git", rev = "80ce3dbe23eface96bdf3e1d8ebb090fdca76e68" }
+openpi-client = { path = "../../packages/openpi-client", editable = true }
+
+[tool.uv]
+package = false

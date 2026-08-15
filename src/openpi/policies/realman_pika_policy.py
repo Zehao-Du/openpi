@@ -7,12 +7,12 @@ from openpi import transforms
 from openpi.models import model as _model
 
 
-def make_libero_example() -> dict:
-    """Creates a random input example for the Libero policy."""
+def make_realmanpika_example() -> dict:
+    """Creates a random input example for the Realman Pika policy."""
     return {
-        "observation/state": np.random.rand(8),
-        "observation/image": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
-        "observation/wrist_image": np.random.randint(256, size=(224, 224, 3), dtype=np.uint8),
+        "observation/state": np.random.rand(7),
+        "observation/image": np.random.randint(256, size=(480, 640, 3), dtype=np.uint8),
+        "observation/wrist_image": np.random.randint(256, size=(480, 640, 3), dtype=np.uint8),
         "prompt": "do something",
     }
 
