@@ -217,3 +217,9 @@ silently contain incorrectly processed images. Use `--test-mode` to validate
 episode discovery, grasp-cycle planning, and sliced state arrays without
 loading SAM 3. The standalone splitter above remains useful when an explicit
 single-grasp Pika dataset is needed for inspection or another pipeline.
+
+## keypoint 开发步骤
+
+1. 使用uv配置环境 （lerobot使用/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/lerobot，uv自己安装）
+2. 仿照examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py，完成examples/realman_pika/keypoint_convert_pika_data_to_lerobot.py
+3. 输出视频，参照/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/visualize/collect_blocks/visualprompt_episode0.mp4（qz平台绝对路径）
