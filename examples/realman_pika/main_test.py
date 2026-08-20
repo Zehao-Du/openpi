@@ -8,6 +8,7 @@ import main
 import numpy as np
 from openpi_client import base_policy
 from openpi_client import websocket_client_policy
+import pytest
 from scipy.spatial.transform import Rotation
 
 from openpi.serving import websocket_policy_server
@@ -131,6 +132,41 @@ def test_make_policy_request_falls_back_when_preprocessing_fails() -> None:
 
     np.testing.assert_array_equal(request["observation/image"], np.full((4, 4, 3), 17))
     np.testing.assert_array_equal(request["observation/wrist_image"], np.full((4, 4, 3), 29))
+
+
+def test_visual_prompt_constructs_one_episode_tracker(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class _FakeTrackerPreprocessor:
+        def __init__(self, checkpoint: object, **kwargs: object) -> None:
+            self.checkpoint = checkpoint
+            self.kwargs = kwargs
+            self.start_count = 0
+            created.append(self)
+
+        def start_episode(self) -> None:
+            self.start_count += 1
+
+        def preprocess(self, images: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+            return dict(images)
+
+    created: list[_FakeTrackerPreprocessor] = []
+    monkeypatch.setattr(main, "Sam3EpisodeTrackerPreprocessor", _FakeTrackerPreprocessor)
+    args = main.Args(visual_prompt=True)
+
+    preprocessor = main._make_image_preprocessor(args)  # noqa: SLF001
+
+    assert preprocessor is created[0]
+    assert len(created) == 1
+    assert created[0].start_count == 1
+    assert created[0].checkpoint == args.sam3.checkpoint
+    assert created[0].kwargs["error_policy"] == "fallback"
+    assert created[0].kwargs["model_input_size"] == 224
+
+
+def test_visual_prompt_cli_accepts_hyphen_and_underscore_aliases() -> None:
+    assert main.tyro.cli(main.Args, args=["--visual-prompt"]).visual_prompt is True
+    assert main.tyro.cli(main.Args, args=["--visual_prompt"]).visual_prompt is True
 
 
 def test_absolute_chunk_to_local_delta() -> None:

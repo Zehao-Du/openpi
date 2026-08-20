@@ -12,9 +12,10 @@ import dataclasses
 import logging
 import pathlib
 import time
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from image_preprocessing import ImagePreprocessor
+from image_preprocessing import Sam3EpisodeTrackerPreprocessor
 from image_preprocessing import Sam3RecolorPreprocessor
 from lerobot.robots.realman_pika.transforms import realman_tcp_pose_to_pika_gripper_pose
 import numpy as np
@@ -58,6 +59,10 @@ class Args:
     prompt: str = "pick all blocks into the drawer"
     resize_size: int = 224
     sam3: Sam3RecolorConfig = dataclasses.field(default_factory=Sam3RecolorConfig)
+    visual_prompt: Annotated[
+        bool,
+        tyro.conf.arg(aliases=("--visual_prompt",)),
+    ] = False
 
     # Rollout behavior. Execution is opt-in for hardware safety.
     execute: bool = False
@@ -237,20 +242,36 @@ def _confirm_chunk() -> bool:
     return input("Execute this action chunk? [y/N]: ").strip().lower() in {"y", "yes"}
 
 
-def run(args: Args) -> None:
-    image_preprocessor = None
-    if args.sam3.enabled:
-        image_preprocessor = Sam3RecolorPreprocessor(
+def _make_image_preprocessor(args: Args) -> ImagePreprocessor | None:
+    common_kwargs = {
+        "prompts": args.sam3.prompts,
+        "target_rgb": args.sam3.target_rgb,
+        "device": args.sam3.device,
+        "score_threshold": args.sam3.score_threshold,
+        "mask_threshold": args.sam3.mask_threshold,
+        "alpha": args.sam3.alpha,
+        "min_component_area": args.sam3.min_component_area,
+        "model_input_size": args.sam3.model_input_size,
+    }
+    if args.visual_prompt:
+        image_preprocessor = Sam3EpisodeTrackerPreprocessor(
             args.sam3.checkpoint,
-            prompts=args.sam3.prompts,
-            target_rgb=args.sam3.target_rgb,
-            device=args.sam3.device,
-            score_threshold=args.sam3.score_threshold,
-            mask_threshold=args.sam3.mask_threshold,
-            alpha=args.sam3.alpha,
-            min_component_area=args.sam3.min_component_area,
-            model_input_size=args.sam3.model_input_size,
+            error_policy="fallback",
+            **common_kwargs,
         )
+        image_preprocessor.start_episode()
+        logging.info(
+            "Visual-prompt tracking enabled: SAM 3 detects on the first frame, "
+            "then tracks for the rest of the rollout"
+        )
+        return image_preprocessor
+    if args.sam3.enabled:
+        return Sam3RecolorPreprocessor(args.sam3.checkpoint, **common_kwargs)
+    return None
+
+
+def run(args: Args) -> None:
+    image_preprocessor = _make_image_preprocessor(args)
     client = websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
     logging.info("Policy server metadata: %s", client.get_server_metadata())
     robot = _create_robot(args)

@@ -247,6 +247,47 @@ def test_episode_tracker_applies_camera_specific_first_frame_score_threshold() -
     assert not masks["wrist_image"].any()
 
 
+def test_episode_tracker_detects_first_frame_then_tracks_later_frames() -> None:
+    preprocessor = image_preprocessing.Sam3EpisodeTrackerPreprocessor.__new__(
+        image_preprocessing.Sam3EpisodeTrackerPreprocessor
+    )
+    preprocessor._frame_index = 0  # noqa: SLF001
+    preprocessor._sessions = {}  # noqa: SLF001
+    preprocessor.error_policy = "raise"
+    preprocessor.target_rgb = (0, 0, 255)
+    preprocessor.alpha = 0.9
+    preprocessor.last_elapsed_ms = None
+    calls: list[str] = []
+
+    def detect(images: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+        calls.append("detect")
+        return {name: np.ones(image.shape[:2], dtype=bool) for name, image in images.items()}
+
+    def initialize(
+        images: dict[str, np.ndarray], masks: dict[str, np.ndarray]
+    ) -> dict[str, np.ndarray]:
+        preprocessor._sessions = {name: object() for name in images}  # noqa: SLF001
+        return masks
+
+    def track(camera_name: str, image: np.ndarray) -> np.ndarray:
+        calls.append(f"track:{camera_name}")
+        return np.ones(image.shape[:2], dtype=bool)
+
+    preprocessor._detect_first_frame = detect  # type: ignore[method-assign]  # noqa: SLF001
+    preprocessor._initialize_first_frame_trackers = initialize  # type: ignore[method-assign]  # noqa: SLF001
+    preprocessor._track_frame = track  # type: ignore[method-assign]  # noqa: SLF001
+    preprocessor._maybe_redetect_shrunken_mask = lambda images, masks: masks  # type: ignore[method-assign]  # noqa: SLF001
+    images = {
+        "fisheye": np.full((10, 10, 3), 100, dtype=np.uint8),
+        "rgb": np.full((10, 10, 3), 200, dtype=np.uint8),
+    }
+
+    preprocessor.preprocess(images)
+    preprocessor.preprocess(images)
+
+    assert calls == ["detect", "track:fisheye", "track:rgb"]
+
+
 def _identity_camera_mapping() -> image_preprocessing.PolynomialCameraMapping:
     return image_preprocessing.PolynomialCameraMapping(
         source_size_wh=(640, 480),

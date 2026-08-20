@@ -86,6 +86,21 @@ uv run --project examples/realman_pika python examples/realman_pika/main.py \
   --sam3.checkpoint ../foundation_models/SAM3
 ```
 
+For online visual-prompt tracking, use `--visual-prompt` (the
+`--visual_prompt` alias is also accepted). This flag loads the SAM 3 video
+tracker even when `--sam3.enabled` is not supplied. Both resized camera images
+are detected and recolored on the first policy request; every later request in
+the same rollout reuses the tracker state instead of running text detection:
+
+```bash
+uv run --project examples/realman_pika python examples/realman_pika/main.py \
+  --host <policy-server-ip> \
+  --visual-prompt \
+  --sam3.checkpoint ../foundation_models/SAM3 \
+  --sam3.prompts "pink block" \
+  --sam3.device cuda
+```
+
 Prompts, color, device, thresholds, blending, and component filtering can all
 be overridden. For example:
 
