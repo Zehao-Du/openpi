@@ -3,7 +3,8 @@ name = "openpi-realman-pika-client"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
-    "lerobot[intelrealsense]",
+    "h5py>=3.13.0",
+    "lerobot[dataset,intelrealsense,transformers-dep]",
     "openpi-client",
     "scipy>=1.14.0",
     "tyro>=0.9.5",

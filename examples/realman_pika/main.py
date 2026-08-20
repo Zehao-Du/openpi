@@ -14,6 +14,8 @@ import pathlib
 import time
 from typing import Any, Literal
 
+from image_preprocessing import ImagePreprocessor
+from image_preprocessing import Sam3RecolorPreprocessor
 from lerobot.robots.realman_pika.transforms import realman_tcp_pose_to_pika_gripper_pose
 import numpy as np
 from openpi_client import image_tools
@@ -33,12 +35,29 @@ STATE_ACTION_KEYS = (
 
 
 @dataclasses.dataclass
+class Sam3RecolorConfig:
+    enabled: bool = False
+    checkpoint: pathlib.Path = pathlib.Path(
+        "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/SAM3"
+    )
+    prompts: tuple[str, ...] = ("pink block",)
+    target_rgb: tuple[int, int, int] = (0, 0, 255)
+    device: str | None = None
+    score_threshold: float = 0.5
+    mask_threshold: float = 0.5
+    alpha: float = 0.9
+    min_component_area: int = 64
+    model_input_size: int = 224
+
+
+@dataclasses.dataclass
 class Args:
     # OpenPI policy server.
     host: str = "127.0.0.1"
     port: int = 8000
     prompt: str = "pick all blocks into the drawer"
     resize_size: int = 224
+    sam3: Sam3RecolorConfig = dataclasses.field(default_factory=Sam3RecolorConfig)
 
     # Rollout behavior. Execution is opt-in for hardware safety.
     execute: bool = False
@@ -96,17 +115,42 @@ def _prepare_image(image: Any, resize_size: int) -> np.ndarray:
     return image_tools.convert_to_uint8(image_tools.resize_with_pad(image, resize_size, resize_size))
 
 
-def make_policy_request(observation: dict[str, Any], prompt: str, resize_size: int) -> dict[str, Any]:
+def make_policy_request(
+    observation: dict[str, Any],
+    prompt: str,
+    resize_size: int,
+    image_preprocessor: ImagePreprocessor | None = None,
+) -> dict[str, Any]:
     # input realman tcp pose
     missing_images = [key for key in ("fisheye", "rgb") if key not in observation]
     if missing_images:
         raise KeyError(f"RealmanPika observation is missing camera keys: {missing_images}")
 
+    images = {key: _prepare_image(observation[key], resize_size) for key in ("fisheye", "rgb")}
+    if image_preprocessor is not None:
+        try:
+            processed_images = image_preprocessor.preprocess(images)
+            if set(processed_images) != set(images):
+                raise ValueError(
+                    f"Image preprocessor changed camera keys from {set(images)} to {set(processed_images)}"
+                )
+            for key, image in processed_images.items():
+                image_array = np.asarray(image)
+                if image_array.shape != images[key].shape or image_array.dtype != images[key].dtype:
+                    raise ValueError(
+                        f"Image preprocessor changed camera {key!r} from shape/dtype "
+                        f"{images[key].shape}/{images[key].dtype} to {image_array.shape}/{image_array.dtype}"
+                    )
+                processed_images[key] = image_array
+            images = processed_images
+        except Exception:
+            logging.exception("Image preprocessing failed; using the original camera images")
+
     # Match the conversion script: Pika fisheye is the primary/global view and
     # RealSense RGB is the narrower wrist view.
     return {
-        "observation/image": _prepare_image(observation["fisheye"], resize_size),
-        "observation/wrist_image": _prepare_image(observation["rgb"], resize_size),
+        "observation/image": images["fisheye"],
+        "observation/wrist_image": images["rgb"],
         "observation/state": _state_from_observation(observation),  # convert realman tcp pose to pika pose
         "prompt": prompt,
     }
@@ -194,6 +238,19 @@ def _confirm_chunk() -> bool:
 
 
 def run(args: Args) -> None:
+    image_preprocessor = None
+    if args.sam3.enabled:
+        image_preprocessor = Sam3RecolorPreprocessor(
+            args.sam3.checkpoint,
+            prompts=args.sam3.prompts,
+            target_rgb=args.sam3.target_rgb,
+            device=args.sam3.device,
+            score_threshold=args.sam3.score_threshold,
+            mask_threshold=args.sam3.mask_threshold,
+            alpha=args.sam3.alpha,
+            min_component_area=args.sam3.min_component_area,
+            model_input_size=args.sam3.model_input_size,
+        )
     client = websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
     logging.info("Policy server metadata: %s", client.get_server_metadata())
     robot = _create_robot(args)
@@ -208,7 +265,7 @@ def run(args: Args) -> None:
             observation = robot.get_observation()
             realman_tcp_pose = _realman_tcp_pose_from_observation(observation)
             # repack into policy input
-            request = make_policy_request(observation, args.prompt, args.resize_size)
+            request = make_policy_request(observation, args.prompt, args.resize_size, image_preprocessor)
             pika_state = request["observation/state"]
             action_chunk = _validate_action_chunk(client.infer(request)["actions"])
 

@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 import multiprocessing
 import socket
 import time
@@ -13,6 +14,18 @@ from openpi.serving import websocket_policy_server
 
 _RANDOM_POLICY_SEED = 7
 _ACTION_HORIZON = 10
+
+
+class _FakeImagePreprocessor:
+    def __init__(self) -> None:
+        self.input_shapes: dict[str, tuple[int, ...]] = {}
+
+    def preprocess(self, images: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+        self.input_shapes = {key: image.shape for key, image in images.items()}
+        return {
+            "fisheye": np.full_like(images["fisheye"], (10, 20, 30)),
+            "rgb": np.full_like(images["rgb"], (40, 50, 60)),
+        }
 
 
 class _RandomPolicy(base_policy.BasePolicy):
@@ -76,6 +89,48 @@ def test_make_policy_request_maps_realman_pika_observation() -> None:
     assert request["observation/image"].shape == (4, 4, 3)
     assert request["observation/wrist_image"].shape == (4, 4, 3)
     assert request["prompt"] == "pick the block"
+
+
+def test_make_policy_request_resizes_both_cameras_before_preprocessing() -> None:
+    observation = {
+        **{key: float(index) for index, key in enumerate(main.STATE_ACTION_KEYS)},
+        "fisheye": np.zeros((8, 8, 3), dtype=np.uint8),
+        "rgb": np.full((8, 8, 3), 255, dtype=np.uint8),
+    }
+    preprocessor = _FakeImagePreprocessor()
+
+    request = main.make_policy_request(
+        observation,
+        "pick the block",
+        resize_size=4,
+        image_preprocessor=preprocessor,
+    )
+
+    assert preprocessor.input_shapes == {"fisheye": (4, 4, 3), "rgb": (4, 4, 3)}
+    np.testing.assert_array_equal(request["observation/image"], np.full((4, 4, 3), (10, 20, 30)))
+    np.testing.assert_array_equal(request["observation/wrist_image"], np.full((4, 4, 3), (40, 50, 60)))
+
+
+def test_make_policy_request_falls_back_when_preprocessing_fails() -> None:
+    class _FailingPreprocessor:
+        def preprocess(self, images: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+            raise RuntimeError("segmentation failed")
+
+    observation = {
+        **{key: float(index) for index, key in enumerate(main.STATE_ACTION_KEYS)},
+        "fisheye": np.full((8, 8, 3), 17, dtype=np.uint8),
+        "rgb": np.full((8, 8, 3), 29, dtype=np.uint8),
+    }
+
+    request = main.make_policy_request(
+        observation,
+        "pick the block",
+        resize_size=4,
+        image_preprocessor=_FailingPreprocessor(),
+    )
+
+    np.testing.assert_array_equal(request["observation/image"], np.full((4, 4, 3), 17))
+    np.testing.assert_array_equal(request["observation/wrist_image"], np.full((4, 4, 3), 29))
 
 
 def test_absolute_chunk_to_local_delta() -> None:
