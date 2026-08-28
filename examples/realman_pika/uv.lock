@@ -230,6 +230,11 @@ wheels = [
 ]
 
 [[package]]
+name = "cotracker"
+version = "3.0"
+source = { git = "https://github.com/facebookresearch/co-tracker.git?rev=82e02e8029753ad4ef13cf06be7f4fc5facdda4d#82e02e8029753ad4ef13cf06be7f4fc5facdda4d" }
+
+[[package]]
 name = "cuda-bindings"
 version = "12.9.7"
 source = { registry = "https://pypi.org/simple" }
@@ -968,6 +973,7 @@ name = "openpi-realman-pika-client"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "cotracker" },
     { name = "h5py" },
     { name = "lerobot", extra = ["dataset", "intelrealsense", "transformers-dep"] },
     { name = "openpi-client" },
@@ -977,6 +983,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "cotracker", git = "https://github.com/facebookresearch/co-tracker.git?rev=82e02e8029753ad4ef13cf06be7f4fc5facdda4d" },
     { name = "h5py", specifier = ">=3.13.0" },
     { name = "lerobot", extras = ["dataset", "intelrealsense", "transformers-dep"], git = "https://github.com/Zehao-Du/lerobot.git?rev=80ce3dbe23eface96bdf3e1d8ebb090fdca76e68" },
     { name = "openpi-client", editable = "../../packages/openpi-client" },

@@ -3,6 +3,7 @@ name = "openpi-realman-pika-client"
 version = "0.1.0"
 requires-python = ">=3.12,<3.13"
 dependencies = [
+    "cotracker",
     "h5py>=3.13.0",
     "lerobot[dataset,intelrealsense,transformers-dep]",
     "openpi-client",
@@ -13,6 +14,7 @@ dependencies = [
 [tool.uv.sources]
 lerobot = { git = "https://github.com/Zehao-Du/lerobot.git", rev = "80ce3dbe23eface96bdf3e1d8ebb090fdca76e68" }
 openpi-client = { path = "../../packages/openpi-client", editable = true }
+cotracker = { git = "https://github.com/facebookresearch/co-tracker.git", rev = "82e02e8029753ad4ef13cf06be7f4fc5facdda4d" }
 
 [tool.uv]
 package = false

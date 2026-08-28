@@ -3,15 +3,15 @@ Script for converting a pika collected dataset to LeRobot format.
 
 Usage:
 uv run examples/realman_pika/convert_pika_data_to_lerobot.py \
-    --data-dir /absolute/path/to/collect_blocks
+    --data-dir /absolute/path/to/collect_blocks_0824
 
 List matched episodes without converting anything:
 uv run examples/realman_pika/convert_pika_data_to_lerobot.py \
-    --data-dir /absolute/path/to/collect_blocks --test-mode
+    --data-dir /absolute/path/to/collect_blocks_0824 --test-mode
 
 If you want to push your dataset to the Hugging Face Hub, you can use the following command:
 uv run examples/realman_pika/convert_pika_data_to_lerobot.py \
-    --data-dir /absolute/path/to/collect_blocks --push-to-hub
+    --data-dir /absolute/path/to/collect_blocks_0824 --push-to-hub
 
 The resulting dataset will get saved to the $HF_LEROBOT_HOME directory.
 """
@@ -30,10 +30,13 @@ from scipy.spatial.transform import Rotation
 from tqdm.auto import tqdm
 import tyro
 
-REPO_NAME = "Zehao123/pika_collect_blocks_224_224"
+REPO_NAME = "Zehao123/pika_collect_blocks_0824_224_224"
 TASK_PROMPT = "pick all blocks into the drawer"
 FPS = 30
 IMAGE_SIZE = 224
+DEFAULT_DATA_DIR = Path(
+    "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks_0824"
+)
 
 TCP_KEY = "localization/pose/pika"
 GRIPPER_KEY = "gripper/encoderDistance/pika"
@@ -41,26 +44,27 @@ FISHEYE_KEY = "camera/color/pikaFisheyeCamera"
 DEPTH_CAMERA_RGB_KEY = "camera/color/pikaDepthCamera"
 
 
-def _episode_sort_key(path: Path) -> tuple[int, int | str]:
+def _episode_sort_key(path: Path, data_dir: Path) -> tuple[str, int, int | str]:
     match = re.fullmatch(r"episode(\d+)", path.name)
-    return (0, int(match.group(1))) if match else (1, path.name)
+    parent = path.parent.relative_to(data_dir).as_posix()
+    return (parent, 0, int(match.group(1))) if match else (parent, 1, path.name)
 
 
 def _find_episode_dirs(data_dir: Path, *, test_mode: bool = False) -> list[Path]:
     episode_dirs = sorted(
         (
-            path
-            for path in data_dir.iterdir()
-            if path.is_dir() and path.name.startswith("episode") and (path / "data.hdf5").is_file()
+            hdf5_path.parent
+            for hdf5_path in data_dir.rglob("data.hdf5")
+            if re.fullmatch(r"episode\d+", hdf5_path.parent.name)
         ),
-        key=_episode_sort_key,
+        key=lambda path: _episode_sort_key(path, data_dir),
     )
     if not episode_dirs:
-        raise FileNotFoundError(f"No episode*/data.hdf5 directories found under {data_dir}")
+        raise FileNotFoundError(f"No **/episode*/data.hdf5 directories found under {data_dir}")
     if test_mode:
         print(f"Found {len(episode_dirs)} episode directories:")
         for episode_dir in episode_dirs:
-            print(episode_dir)
+            print(episode_dir.relative_to(data_dir))
     return episode_dirs
 
 
@@ -103,7 +107,7 @@ def _read_state(file: h5py.File, *, test_mode: bool = False) -> np.ndarray:
     return state
 
 
-def main(data_dir: str, *, push_to_hub: bool = False, test_mode: bool = False):
+def main(data_dir: str = str(DEFAULT_DATA_DIR), *, push_to_hub: bool = False, test_mode: bool = False):
     # resolve data path and episode path
     data_path = Path(data_dir).expanduser()
     if not data_path.is_absolute():
@@ -179,7 +183,8 @@ def main(data_dir: str, *, push_to_hub: bool = False, test_mode: bool = False):
             if len(file[FISHEYE_KEY]) != episode_length or len(file[DEPTH_CAMERA_RGB_KEY]) != episode_length:
                 raise ValueError(f"{episode_dir}: camera/state length mismatch")
 
-            for frame_index in tqdm(range(episode_length), desc=episode_dir.name, unit="frame", leave=False):
+            episode_label = episode_dir.relative_to(data_path).as_posix()
+            for frame_index in tqdm(range(episode_length), desc=episode_label, unit="frame", leave=False):
                 # As in the previous UMI dataset, the absolute pose trajectory is stored as action.
                 # OpenPI samples future entries and converts the first six dimensions to relative actions.
                 dataset.add_frame(

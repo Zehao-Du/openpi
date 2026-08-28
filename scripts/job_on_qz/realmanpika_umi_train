@@ -30,11 +30,125 @@ cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
 && export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
 && export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
 && export WANDB_MODE=offline \
-&& environment=visualprompt_pi05_realmanpika_umi \
-&& LogName=realmanpika_umi_CollectBlocks_visualprompt \
-&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py pi05_${environment} \
+&& environment=visualprompt_pi05_realmanpika_umi_new \
+&& LogName=realmanpika_umi_CollectBlocks_visualprompt_new \
+&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py ${environment} \
 --exp-name=${LogName} \
---fsdp-devices=4 \
+--fsdp-devices=8 \
+--num-workers=8 \
+--overwrite \
+2>&1 | tee Logs/train/${LogName}.log
+'
+
+# environment=visualprompt_pi05_realmanpika_umi_new
+# LogName=realmanpika_umi_CollectBlocks_visualprompt_new
+# XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py ${environment} \
+# --exp-name=${LogName} \
+# --overwrite \
+# 2>&1 | tee Logs/train/${LogName}.log
+
+
+# 0824
+#!/bin/bash
+
+/bin/bash -lc '
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& ConfigName=pi05_realmanpika_umi_0824 \
+&& LogName=pi05_realmanpika_umi_0824 \
+&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py ${ConfigName} \
+--exp-name=${LogName} \
+--fsdp-devices=8 \
+--num-workers=8 \
+--overwrite \
+2>&1 | tee Logs/train/${LogName}.log
+'
+
+
+
+#!/bin/bash
+
+/bin/bash -lc '
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& environment=visualprompt_pi05_realmanpika_umi_new_0824 \
+&& LogName=visualprompt_pi05_realmanpika_umi_new_0824 \
+&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py ${environment} \
+--exp-name=${LogName} \
+--fsdp-devices=8 \
+--num-workers=8 \
+--overwrite \
+2>&1 | tee Logs/train/${LogName}.log
+'
+
+# 0826
+#!/bin/bash
+
+/bin/bash -lc '
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& ConfigName=pi05_realmanpika_umi_0826 \
+&& LogName=pi05_realmanpika_umi_0826_2 \
+&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py ${ConfigName} \
+--exp-name=${LogName} \
+--fsdp-devices=8 \
+--num-workers=8 \
+--overwrite \
+2>&1 | tee Logs/train/${LogName}.log
+'
+
+# 0828
+#!/bin/bash
+
+/bin/bash -lc '
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& ConfigName=pi05_realmanpika_umi_0828 \
+&& LogName=pi05_realmanpika_umi_0828 \
+&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py ${ConfigName} \
+--exp-name=${LogName} \
+--fsdp-devices=8 \
+--num-workers=8 \
+--overwrite \
+2>&1 | tee Logs/train/${LogName}.log
+'
+
+# keypoint
+#!/bin/bash
+
+/bin/bash -lc '
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& ConfigName=visualprompt_pi05_realmanpika_umi_keypoint_0828 \
+&& LogName=visualprompt_pi05_realmanpika_umi_keypoint_0828 \
+&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py ${ConfigName} \
+--exp-name=${LogName} \
+--fsdp-devices=8 \
 --num-workers=8 \
 --overwrite \
 2>&1 | tee Logs/train/${LogName}.log

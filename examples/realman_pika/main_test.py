@@ -169,6 +169,46 @@ def test_visual_prompt_cli_accepts_hyphen_and_underscore_aliases() -> None:
     assert main.tyro.cli(main.Args, args=["--visual_prompt"]).visual_prompt is True
 
 
+def test_stick_cli_is_opt_in_and_keeps_hardware_placeholders_empty() -> None:
+    args = main.tyro.cli(main.Args, args=["--stick"])
+
+    assert args.stick is True
+    assert args.stick_config.external_camera_serials == ()
+    assert args.stick_config.calibration_dir is None
+
+
+def test_stick_with_empty_hardware_config_fails_before_connecting() -> None:
+    with pytest.raises(ValueError, match="external-camera-serials"):
+        main.run(main.Args(stick=True))
+
+
+def test_stick_rejects_generic_visual_preprocessing() -> None:
+    with pytest.raises(ValueError, match="cannot be combined"):
+        main.run(main.Args(stick=True, visual_prompt=True))
+
+
+def test_strict_image_preprocessor_error_is_not_silently_removed() -> None:
+    class _StrictFailingPreprocessor:
+        error_policy = "raise"
+
+        def preprocess(self, images: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
+            raise RuntimeError("target tracker failed")
+
+    observation = {
+        **{key: float(index) for index, key in enumerate(main.STATE_ACTION_KEYS)},
+        "fisheye": np.zeros((8, 8, 3), dtype=np.uint8),
+        "rgb": np.zeros((8, 8, 3), dtype=np.uint8),
+    }
+
+    with pytest.raises(RuntimeError, match="target tracker failed"):
+        main.make_policy_request(
+            observation,
+            "pull the stick",
+            resize_size=4,
+            image_preprocessor=_StrictFailingPreprocessor(),
+        )
+
+
 def test_absolute_chunk_to_local_delta() -> None:
     current_position = np.array([1.0, 2.0, 3.0])
     current_rotation = Rotation.from_euler("z", 90, degrees=True)

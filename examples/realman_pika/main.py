@@ -22,6 +22,10 @@ import numpy as np
 from openpi_client import image_tools
 from openpi_client import websocket_client_policy
 from scipy.spatial.transform import Rotation
+from stick_inference import ManualSam3KeypointPreprocessor
+from stick_inference import StickConfig
+from stick_inference import StickTargetSelector
+from stick_inference import select_policy_keypoints_interactively
 import tyro
 
 STATE_ACTION_KEYS = (
@@ -63,6 +67,8 @@ class Args:
         bool,
         tyro.conf.arg(aliases=("--visual_prompt",)),
     ] = False
+    stick: bool = False
+    stick_config: StickConfig = dataclasses.field(default_factory=StickConfig)
 
     # Rollout behavior. Execution is opt-in for hardware safety.
     execute: bool = False
@@ -149,6 +155,8 @@ def make_policy_request(
                 processed_images[key] = image_array
             images = processed_images
         except Exception:
+            if getattr(image_preprocessor, "error_policy", "fallback") == "raise":
+                raise
             logging.exception("Image preprocessing failed; using the original camera images")
 
     # Match the conversion script: Pika fisheye is the primary/global view and
@@ -271,7 +279,21 @@ def _make_image_preprocessor(args: Args) -> ImagePreprocessor | None:
 
 
 def run(args: Args) -> None:
-    image_preprocessor = _make_image_preprocessor(args)
+    if args.stick and (args.visual_prompt or args.sam3.enabled):
+        raise ValueError("--stick cannot be combined with --visual-prompt or --sam3.enabled")
+
+    stick_selection = None
+    if args.stick:
+        # Reject empty calibration placeholders before any network or robot connection.
+        args.stick_config.validate_hardware()
+        stick_selection = StickTargetSelector(
+            args.stick_config,
+            checkpoint=args.sam3.checkpoint,
+            device=args.sam3.device,
+        ).select()
+
+    image_preprocessor = None if args.stick else _make_image_preprocessor(args)
+    effective_prompt = "pull the stick" if args.stick else args.prompt
     client = websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
     logging.info("Policy server metadata: %s", client.get_server_metadata())
     robot = _create_robot(args)
@@ -281,12 +303,44 @@ def run(args: Args) -> None:
         robot.connect()
         logging.info("RealMan-Pika connected. execute=%s", args.execute)
 
+        pending_observation = None
+        if args.stick:
+            assert stick_selection is not None
+            pending_observation = robot.get_observation()
+            initial_images = {
+                key: _prepare_image(pending_observation[key], args.resize_size)
+                for key in ("fisheye", "rgb")
+            }
+            selected_points = select_policy_keypoints_interactively(
+                stick_selection.preview_rgb,
+                initial_images,
+            )
+            image_preprocessor = ManualSam3KeypointPreprocessor(
+                args.sam3.checkpoint,
+                initial_points=selected_points,
+                stick_config=args.stick_config,
+                device=args.sam3.device,
+            )
+            image_preprocessor.start_episode()
+            logging.info(
+                "Pull-stick target initialized: prompt=%s, vertical_angle=%.2f deg, points=%s",
+                stick_selection.prompt,
+                stick_selection.vertical_angle_deg,
+                selected_points,
+            )
+
         while executed_steps < args.max_steps:
             # get obesrvation
-            observation = robot.get_observation()
+            observation = pending_observation or robot.get_observation()
+            pending_observation = None
             realman_tcp_pose = _realman_tcp_pose_from_observation(observation)
             # repack into policy input
-            request = make_policy_request(observation, args.prompt, args.resize_size, image_preprocessor)
+            request = make_policy_request(
+                observation,
+                effective_prompt,
+                args.resize_size,
+                image_preprocessor,
+            )
             pika_state = request["observation/state"]
             action_chunk = _validate_action_chunk(client.infer(request)["actions"])
 

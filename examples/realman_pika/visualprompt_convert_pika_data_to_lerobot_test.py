@@ -393,10 +393,9 @@ def test_manifest_uses_recolor_target_for_policy_prompt(tmp_path: Path) -> None:
 def test_offline_sam3_defaults_to_cuda() -> None:
     assert converter.Sam3Config().device == "cuda"
     assert converter.Sam3Config().fisheye_score_threshold == 0.4
-    assert converter.Sam3Config().cross_camera_mapping == converter.DEFAULT_CROSS_CAMERA_MAPPING
 
 
-def test_offline_preprocessor_uses_fisheye_specific_score_threshold(
+def test_offline_preprocessor_detects_cameras_independently_at_fisheye_threshold(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     captured: dict[str, Any] = {}
@@ -413,9 +412,10 @@ def test_offline_preprocessor_uses_fisheye_specific_score_threshold(
 
     assert captured["score_threshold"] == 0.5
     assert captured["camera_score_thresholds"] == {"image": 0.4}
-    assert captured["cross_camera_mapping"] == config.cross_camera_mapping
-    assert captured["mapping_source_camera"] == "wrist_image"
-    assert captured["mapping_destination_camera"] == "image"
+    assert "cross_camera_mapping" not in captured
+    assert "mapping_source_camera" not in captured
+    assert "mapping_destination_camera" not in captured
+    assert "spatial_prompt_box_padding" not in captured
     assert captured["redetect_area_ratio"] == config.redetect_area_ratio
     assert captured["redetect_reference_decay"] == config.redetect_reference_decay
     assert captured["redetect_cooldown_frames"] == config.redetect_cooldown_frames

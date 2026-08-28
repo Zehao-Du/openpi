@@ -10,22 +10,22 @@ single-grasp dataset is created.
 Usage:
 uv run --project examples/realman_pika python \
     examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
-    --data-dir /absolute/path/to/collect_blocks
+    --data-dir /absolute/path/to/collect_blocks_0824
 
 Validate episode discovery and state arrays without loading SAM 3:
 uv run --project examples/realman_pika python \
     examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
-    --data-dir /absolute/path/to/collect_blocks --test-mode
+    --data-dir /absolute/path/to/collect_blocks_0824 --test-mode
 
 Classify every episode without loading SAM 3 or writing a dataset:
 uv run --project examples/realman_pika python \
     examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
-    --data-dir /absolute/path/to/collect_blocks --classify-only
+    --data-dir /absolute/path/to/collect_blocks_0824 --classify-only
 
 Customize SAM 3 and the offline batch size:
 uv run --project examples/realman_pika python \
     examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
-    --data-dir /absolute/path/to/collect_blocks \
+    --data-dir /absolute/path/to/collect_blocks_0824 \
     --sam-batch-size 8 \
     --sam3.checkpoint ../foundation_models/SAM3 \
     --sam3.prompts "{color} block" "{color} cube" \
@@ -64,12 +64,11 @@ from split_pika_data_by_grasp import detect_grasp_cycles
 from tqdm.auto import tqdm
 import tyro
 
-DEFAULT_DATA_DIR = Path("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks")
-DEFAULT_REPO_ID = "Zehao123/pika_collect_blocks_224_224_visualprompt"
-DEFAULT_SAM3_CHECKPOINT = Path(__file__).resolve().parents[3] / "foundation_models" / "SAM3"
-DEFAULT_CROSS_CAMERA_MAPPING = Path(
-    "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/pika/dataset_pika/realsense_to_fisheye_mapping.json"
+DEFAULT_DATA_DIR = Path(
+    "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks_0824"
 )
+DEFAULT_REPO_ID = "Zehao123/pika_collect_blocks_224_224_visualprompt_new_0824"
+DEFAULT_SAM3_CHECKPOINT = Path(__file__).resolve().parents[3] / "foundation_models" / "SAM3"
 TASK_PROMPT_TEMPLATE = "grasp the {color} block and place it into the drawer"
 FPS = 30
 IMAGE_SIZE = 224
@@ -104,10 +103,6 @@ class Sam3Config:
     alpha: float = 0.9
     min_component_area: int = 64
     model_input_size: int = IMAGE_SIZE
-    cross_camera_mapping: Path | None = DEFAULT_CROSS_CAMERA_MAPPING
-    mapping_source_camera: str = "wrist_image"
-    mapping_destination_camera: str = "image"
-    spatial_prompt_box_padding: float = 4.0
     redetect_area_ratio: float = 0.5
     redetect_reference_decay: float = 0.98
     redetect_cooldown_frames: int = 15
@@ -169,26 +164,27 @@ class Args:
     split: SplitConfig = dataclasses.field(default_factory=SplitConfig)
 
 
-def _episode_sort_key(path: Path) -> tuple[int, int | str]:
+def _episode_sort_key(path: Path, data_dir: Path) -> tuple[str, int, int | str]:
     match = re.fullmatch(r"episode(\d+)", path.name)
-    return (0, int(match.group(1))) if match else (1, path.name)
+    parent = path.parent.relative_to(data_dir).as_posix()
+    return (parent, 0, int(match.group(1))) if match else (parent, 1, path.name)
 
 
 def _find_episode_dirs(data_dir: Path, *, test_mode: bool = False) -> list[Path]:
     episode_dirs = sorted(
         (
-            path
-            for path in data_dir.iterdir()
-            if path.is_dir() and path.name.startswith("episode") and (path / "data.hdf5").is_file()
+            hdf5_path.parent
+            for hdf5_path in data_dir.rglob("data.hdf5")
+            if re.fullmatch(r"episode\d+", hdf5_path.parent.name)
         ),
-        key=_episode_sort_key,
+        key=lambda path: _episode_sort_key(path, data_dir),
     )
     if not episode_dirs:
-        raise FileNotFoundError(f"No episode*/data.hdf5 directories found under {data_dir}")
+        raise FileNotFoundError(f"No **/episode*/data.hdf5 directories found under {data_dir}")
     if test_mode:
         print(f"Found {len(episode_dirs)} episode directories:")
         for episode_dir in episode_dirs:
-            print(episode_dir)
+            print(episode_dir.relative_to(data_dir))
     return episode_dirs
 
 
@@ -843,10 +839,6 @@ def _make_preprocessor(config: Sam3Config, initial_prompts: tuple[str, ...]) -> 
         min_component_area=config.min_component_area,
         model_input_size=config.model_input_size,
         error_policy="raise",
-        cross_camera_mapping=config.cross_camera_mapping,
-        mapping_source_camera=config.mapping_source_camera,
-        mapping_destination_camera=config.mapping_destination_camera,
-        spatial_prompt_box_padding=config.spatial_prompt_box_padding,
         redetect_area_ratio=config.redetect_area_ratio,
         redetect_reference_decay=config.redetect_reference_decay,
         redetect_cooldown_frames=config.redetect_cooldown_frames,

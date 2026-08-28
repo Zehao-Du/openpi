@@ -58,6 +58,38 @@ The robot observation must expose an absolute RealMan TCP pose in the same
 base/world frame used by the training data. The client applies the fixed
 RealMan-TCP-to-Pika-gripper extrinsic before sending the state to the policy.
 
+## Pull-stick inference
+
+Pass `--stick` to select the most vertical stick with calibrated external
+RealSense RGB-D cameras and execute the pull with the pi05 policy. This mode
+always sends the task prompt `pull the stick`; it does not call a geometric
+motion planner.
+
+The external camera serials and calibration directory intentionally have no
+defaults yet. Each calibration file must be named
+`T_cam_to_world_<serial>.npy` and contain a finite 4x4 camera-to-world matrix:
+
+```bash
+uv run --project examples/realman_pika python examples/realman_pika/main.py \
+  --host <policy-server-ip> \
+  --stick \
+  --stick-config.external-camera-serials <serial-1> <serial-2> \
+  --stick-config.calibration-dir /path/to/calibration_results
+```
+
+The client uses SAM 3 instance masks and aligned depth to fit each stick axis
+with PCA, then chooses the axis with the smallest acute angle to world Z. A
+window shows that external-camera target beside the fisheye and wrist policy
+views. Click the same stick's white end cap once in each policy view and press
+**Confirm**. SAM 3 then tracks both selections independently and draws the
+training-compatible `(255, 0, 255)` keypoint. If the white cap or tracker is
+temporarily lost, the previous keypoint is retained. Canceling the window or
+missing calibration aborts before any robot action is sent.
+
+`--stick` cannot be combined with `--visual-prompt` or `--sam3.enabled` because
+it owns the image preprocessing pipeline. Query-only mode remains the default;
+add `--execute` only after inspecting the predicted action chunk.
+
 ## Optional SAM 3 recoloring
 
 The robot client can use SAM 3 to segment configurable text-prompted objects.
@@ -175,7 +207,6 @@ uv run --project examples/realman_pika python \
   examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
   --data-dir /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks \
   --sam3.checkpoint ../foundation_models/SAM3 \
-  --sam3.cross-camera-mapping /absolute/path/to/realsense_to_fisheye_mapping.json \
   --sam3.device cuda
 ```
 
@@ -183,22 +214,20 @@ The default output repo ID is
 `Zehao123/pika_collect_blocks_224_224_visualprompt`. Override it with
 `--repo-id`. The inferred color fills the `{color}` placeholder in the SAM 3
 prompt template, for example `green block`. The same loaded model is reused as
-the prompt changes between episodes. On the first frame of each episode, SAM 3
-runs text detection once. The RealSense mask initializes its tracker directly;
-its centroid and outline are also projected through the configured polynomial
-camera mapping to create a positive point and bounding-box prompt for the
-fisheye tracker. If projection or the spatial prompt fails, conversion falls
-back to the fisheye text-detector mask. Every later frame uses pure tracker
-propagation without a per-frame spatial prompt. If the fisheye mask falls below
-50% of its recent reference area, the converter runs text detection once,
-restarts the fisheye tracker, and resumes propagation. Re-detection has a
-15-frame cooldown; configure these values with `--sam3.redetect-area-ratio` and
-`--sam3.redetect-cooldown-frames`. Tracker state is discarded at the episode
-boundary. Both cameras are resize-padded to 224×224 before SAM 3
+the prompt changes between episodes. For each episode, the converter chooses
+the lowest TCP-z frame before gripper close as the preferred detection anchor.
+SAM 3 independently detects the prompted block in fisheye and RealSense; no
+mask, point, or box is transferred between cameras. Each detector mask starts
+that camera's own tracker. If either detector fails, neighboring frames are
+tried until both trackers initialize, otherwise the episode is skipped. The
+successful anchor is then tracked forward and backward through the episode.
+If the fisheye mask falls below 50% of its recent reference area, fisheye is
+re-detected from its own image and its tracker is restarted. Re-detection has a
+15-frame cooldown; configure these values with `--sam3.redetect-area-ratio`
+and `--sam3.redetect-cooldown-frames`. Tracker state is discarded at the
+episode boundary. Both cameras are resize-padded to 224×224 before SAM 3
 and the selected block is recolored to the fixed `--sam3.target-rgb` value,
-blue by default. Native 640×480 mapping coordinates are converted to and from
-the padded 224×224 coordinates automatically. The mapping defaults to
-`/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/pika/dataset_pika/realsense_to_fisheye_mapping.json`.
+blue by default.
 
 Each output frame also receives a color-specific language task such as
 `grasp the green block and place it into the drawer`. The task keeps the

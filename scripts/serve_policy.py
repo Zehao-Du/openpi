@@ -1,8 +1,10 @@
 import dataclasses
 import enum
 import logging
+import pathlib
 import socket
 
+import jax
 import tyro
 
 from openpi.policies import policy as _policy
@@ -48,6 +50,8 @@ class Args:
 
     # Port to serve the policy on.
     port: int = 8000
+    # Directory used for JAX's persistent compilation cache.
+    compilation_cache_dir: str = "~/.cache/jax"
     # Record the policy's behavior for debugging.
     record: bool = False
 
@@ -97,6 +101,11 @@ def create_policy(args: Args) -> _policy.Policy:
 
 
 def main(args: Args) -> None:
+    compilation_cache_dir = pathlib.Path(args.compilation_cache_dir).expanduser()
+    jax.config.update("jax_compilation_cache_dir", str(compilation_cache_dir))
+    jax.config.update("jax_persistent_cache_min_compile_time_secs", 0)
+    logging.info("Using JAX compilation cache: %s", compilation_cache_dir)
+
     policy = create_policy(args)
     policy_metadata = policy.metadata
 
