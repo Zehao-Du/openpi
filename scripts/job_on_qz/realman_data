@@ -8,6 +8,13 @@ cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
 && export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
 && export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
 && uv run --project examples/realman_pika \
-python examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
+python examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
 --data-dir /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks_0824
 '
+
+
+uv run --project examples/realman_pika --no-sync python \
+examples/realman_pika/subset_lerobot_dataset.py \
+--input Zehao123/pika_collect_blocks_224_224 \
+--repo-id Zehao123/pika_umi_collect_blocks_125 \
+--num-episodes 125

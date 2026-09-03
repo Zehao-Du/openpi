@@ -45,6 +45,7 @@ from cotracker.predictor import CoTrackerPredictor
 HERE = Path(__file__).resolve().parent
 PARENT = HERE.parent
 sys.path.insert(0, str(PARENT))
+sys.path.insert(0, str(PARENT / "collect_block"))
 
 
 def _load_module(name: str, path: Path):
@@ -58,7 +59,7 @@ def _load_module(name: str, path: Path):
 
 
 pull = _load_module("pull_stick_converter", HERE / "convert_pika_data_to_lerobot.py")
-visual = _load_module("pika_visualprompt_converter", PARENT / "visualprompt_convert_pika_data_to_lerobot.py")
+visual = _load_module("pika_visualprompt_converter", PARENT / "collect_block" / "visualprompt_convert_pika_data_to_lerobot.py")
 # The shared writer now feeds native-resolution frames to this module's SAM3 preprocessor.
 visual._read_rgb = pull.base._read_native_rgb
 
@@ -118,6 +119,9 @@ class CoTrackerConfig:
 class KeypointConfig:
     rgb: tuple[int, int, int] = (255, 0, 255)
     radius: int = 5
+    dynamic_radius: bool = False
+    min_radius: int = 1
+    radius_scale: float = 1.0
     outline_rgb: tuple[int, int, int] = (255, 255, 255)
     outline_width: int = 2
     white_min_value: int = 170
@@ -126,11 +130,18 @@ class KeypointConfig:
     tip_search_dilation: int = 4
 
 
+@dataclasses.dataclass(frozen=True)
+class KeypointEstimate:
+    point: tuple[int, int]
+    native_radius: float
+
+
 @dataclasses.dataclass
 class Args:
     data_dir: Path = pull.DEFAULT_DATA_DIR
     repo_id: str = DEFAULT_REPO_ID
     task_prompt: str = pull.TASK_PROMPT
+    overwrite: bool = False
     rewrite_existing_prompt: bool = False
     rewrite_task_index: int = 0
     max_recordings: int | None = None
@@ -148,11 +159,11 @@ class Args:
     keypoint: KeypointConfig = dataclasses.field(default_factory=KeypointConfig)
 
 
-def _white_tip_keypoint(
+def _white_tip_keypoint_estimate(
     image: np.ndarray,
     mask: np.ndarray,
     config: KeypointConfig,
-) -> tuple[int, int] | None:
+) -> KeypointEstimate | None:
     """Locate the white end cap nearest an endpoint of the stick mask."""
     mask = np.asarray(mask, dtype=bool)
     mask_points_yx = np.argwhere(mask)
@@ -201,7 +212,22 @@ def _white_tip_keypoint(
     point_yx = best_points_yx[
         np.argmin(np.square(best_points_yx - centroid).sum(axis=1))
     ]
-    return int(point_yx[1]), int(point_yx[0])
+    native_radius = float(
+        np.quantile(np.linalg.norm(best_points_yx - centroid, axis=1), 0.75)
+    )
+    return KeypointEstimate(
+        point=(int(point_yx[1]), int(point_yx[0])),
+        native_radius=max(native_radius, 1.0),
+    )
+
+
+def _white_tip_keypoint(
+    image: np.ndarray,
+    mask: np.ndarray,
+    config: KeypointConfig,
+) -> tuple[int, int] | None:
+    estimate = _white_tip_keypoint_estimate(image, mask, config)
+    return None if estimate is None else estimate.point
 
 
 def _sample_component_points(component: np.ndarray, count: int) -> np.ndarray:
@@ -229,6 +255,8 @@ def _draw_keypoint_at(
     image: np.ndarray,
     point: tuple[int, int] | None,
     config: KeypointConfig,
+    *,
+    radius: int | None = None,
 ) -> np.ndarray:
     image = np.asarray(image)
     if image.ndim != 3 or image.shape[-1] != 3 or image.dtype != np.uint8:
@@ -245,23 +273,39 @@ def _draw_keypoint_at(
     rendered = Image.fromarray(image)
     draw = ImageDraw.Draw(rendered)
     x, y = point
-    outer_radius = config.radius + config.outline_width
+    radius = config.radius if radius is None else radius
+    outer_radius = radius + config.outline_width
     if config.outline_width:
         draw.ellipse(
             (x - outer_radius, y - outer_radius, x + outer_radius, y + outer_radius),
             fill=config.outline_rgb,
         )
     draw.ellipse(
-        (x - config.radius, y - config.radius, x + config.radius, y + config.radius),
+        (x - radius, y - radius, x + radius, y + radius),
         fill=config.rgb,
     )
     return np.asarray(rendered, dtype=np.uint8)
 
 
+def _dynamic_keypoint_radius(
+    native_radius: float,
+    resize_ratio: float,
+    config: KeypointConfig,
+) -> int:
+    if not config.dynamic_radius:
+        return config.radius
+    resized_radius = native_radius / resize_ratio * config.radius_scale
+    return int(np.clip(round(resized_radius), config.min_radius, config.radius))
+
+
 def _draw_keypoint(image: np.ndarray, mask: np.ndarray, config: KeypointConfig) -> np.ndarray:
     if np.asarray(mask).shape != np.asarray(image).shape[:2]:
         raise ValueError(f"Mask shape {np.asarray(mask).shape} does not match image {np.asarray(image).shape[:2]}")
-    return _draw_keypoint_at(image, _white_tip_keypoint(image, mask, config), config)
+    estimate = _white_tip_keypoint_estimate(image, mask, config)
+    if estimate is None:
+        return _draw_keypoint_at(image, None, config)
+    radius = _dynamic_keypoint_radius(estimate.native_radius, 1.0, config)
+    return _draw_keypoint_at(image, estimate.point, config, radius=radius)
 
 
 def _resize_point_with_pad(
@@ -286,15 +330,19 @@ def _render_keypoint_output(
 ) -> np.ndarray:
     """Find the white tip natively, then resize and render the 224px output."""
     image = np.asarray(image)
-    point = _white_tip_keypoint(image, mask, config)
+    estimate = _white_tip_keypoint_estimate(image, mask, config)
     output_size = pull.base.IMAGE_SIZE
     resized_image = pull.base.image_tools.resize_with_pad(image, output_size, output_size)
-    resized_point = None if point is None else _resize_point_with_pad(
-        point,
+    resized_point = None if estimate is None else _resize_point_with_pad(
+        estimate.point,
         image.shape[:2],
         output_size,
     )
-    return _draw_keypoint_at(resized_image, resized_point, config)
+    resize_ratio = max(image.shape[1] / output_size, image.shape[0] / output_size)
+    radius = config.radius if estimate is None else _dynamic_keypoint_radius(
+        estimate.native_radius, resize_ratio, config
+    )
+    return _draw_keypoint_at(resized_image, resized_point, config, radius=radius)
 
 
 class Sam3KeypointPreprocessor(Sam3EpisodeTrackerPreprocessor):
@@ -561,7 +609,7 @@ class CoTrackerKeypointTracker:
         frames: list[np.ndarray],
         anchor_local_index: int,
         query_points_xy: np.ndarray,
-    ) -> list[tuple[int, int] | None]:
+    ) -> list[KeypointEstimate | None]:
         if not frames:
             return []
         shape = frames[0].shape
@@ -588,7 +636,7 @@ class CoTrackerKeypointTracker:
         if self.device.type == "cuda":
             torch.cuda.empty_cache()
 
-        result: list[tuple[int, int] | None] = []
+        result: list[KeypointEstimate | None] = []
         previous_point: np.ndarray | None = None
         previous_index: int | None = None
         height, width = shape[:2]
@@ -621,13 +669,21 @@ class CoTrackerKeypointTracker:
                     continue
             previous_point = point
             previous_index = frame_index
-            result.append((int(round(point[0])), int(round(point[1]))))
+            native_radius = float(
+                np.quantile(np.linalg.norm(coherent - point, axis=1), 0.75)
+            )
+            result.append(
+                KeypointEstimate(
+                    point=(int(round(point[0])), int(round(point[1]))),
+                    native_radius=max(native_radius, 1.0),
+                )
+            )
         self._suppress_reacquisition(result, anchor_local_index)
         return result
 
     def _suppress_reacquisition(
         self,
-        points: list[tuple[int, int] | None],
+        points: list[KeypointEstimate | None],
         anchor_local_index: int,
     ) -> None:
         """Permanently stop a direction after a sustained tracking loss."""
@@ -742,19 +798,26 @@ def _write_cotracker_episode_frames(
             f"{visible_count}/{episode_length} frames"
         )
         processed[camera_name] = []
-        for frame, point in zip(frames, points, strict=True):
+        for frame, estimate in zip(frames, points, strict=True):
             resized = pull.base.image_tools.resize_with_pad(
                 frame, pull.base.IMAGE_SIZE, pull.base.IMAGE_SIZE
             )
             resized_point = (
                 None
-                if point is None
+                if estimate is None
                 else _resize_point_with_pad(
-                    point, frame.shape[:2], pull.base.IMAGE_SIZE
+                    estimate.point, frame.shape[:2], pull.base.IMAGE_SIZE
                 )
             )
+            resize_ratio = max(
+                frame.shape[1] / pull.base.IMAGE_SIZE,
+                frame.shape[0] / pull.base.IMAGE_SIZE,
+            )
+            radius = keypoint.radius if estimate is None else _dynamic_keypoint_radius(
+                estimate.native_radius, resize_ratio, keypoint
+            )
             processed[camera_name].append(
-                _draw_keypoint_at(resized, resized_point, keypoint)
+                _draw_keypoint_at(resized, resized_point, keypoint, radius=radius)
             )
         del frames, points
         gc.collect()
@@ -833,6 +896,12 @@ def _validate_args(args: Args) -> None:
         raise ValueError("CoTracker geometry limits must be positive")
     if args.keypoint.radius < 1 or args.keypoint.outline_width < 0:
         raise ValueError("Keypoint radius must be positive and outline width non-negative")
+    if not 1 <= args.keypoint.min_radius <= args.keypoint.radius:
+        raise ValueError(
+            "keypoint.min_radius must be between 1 and keypoint.radius"
+        )
+    if args.keypoint.radius_scale <= 0:
+        raise ValueError("keypoint.radius_scale must be positive")
     if not 0 <= args.keypoint.white_min_value <= 255:
         raise ValueError("keypoint.white_min_value must be in [0, 255]")
     if not 0 <= args.keypoint.white_max_chroma <= 255:
@@ -1088,15 +1157,9 @@ def main(args: Args) -> None:
             f"{lerobot_append_dataset.meta.total_frames} frames"
         )
 
-    overwrite_output = False
-    if output.exists():
-        try:
-            answer = input(f"Output exists: {output}\nOverwrite it? [y/N]: ")
-        except EOFError:
-            return
-        if answer.strip().lower() not in {"y", "yes"}:
-            return
-        overwrite_output = True
+    overwrite_output = output.exists()
+    if overwrite_output and not args.overwrite:
+        raise FileExistsError(f"Output exists: {output}. Pass --overwrite to replace it.")
 
     # First identify every anchor with SAM3. CoTracker is loaded only after
     # SAM3 is released so the two large models do not occupy GPU memory together.
@@ -1246,6 +1309,9 @@ def main(args: Args) -> None:
             saved_manifest.append(
                 {
                     "episode_index": starting_episode_index + new_episode_count,
+                    "keypoint_dynamic_radius": args.keypoint.dynamic_radius,
+                    "keypoint_min_radius": args.keypoint.min_radius,
+                    "keypoint_radius_scale": args.keypoint.radius_scale,
                     "planned_episode_index": args.start_episode + planned_index,
                     "source_episode": str(path.relative_to(root)),
                     "start": start,

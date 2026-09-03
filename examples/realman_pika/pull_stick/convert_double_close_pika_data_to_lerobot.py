@@ -88,6 +88,7 @@ class PlannedSlice:
 class Args:
     data_dir: Path = DEFAULT_DATA_DIR
     repo_id: str = DEFAULT_REPO_ID
+    overwrite: bool = False
     append_from_repo_id: str | None = None
     append_lerobot_repo_id: str | None = None
     task_prompt: str = pull.TASK_PROMPT
@@ -426,12 +427,8 @@ def main(args: Args) -> None:
         )
 
     if output.exists():
-        try:
-            answer = input(f"Output exists: {output}\nOverwrite it? [y/N]: ")
-        except EOFError:
-            return
-        if answer.strip().lower() not in {"y", "yes"}:
-            return
+        if not args.overwrite:
+            raise FileExistsError(f"Output exists: {output}. Pass --overwrite to replace it.")
         shutil.rmtree(output)
 
     manifest_path = output / "double_close_slice_manifest.json"

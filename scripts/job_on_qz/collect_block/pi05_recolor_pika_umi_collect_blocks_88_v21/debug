@@ -1,0 +1,29 @@
+#!/bin/bash
+
+/bin/bash -lc '
+set -eo pipefail
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& export JAX_PLATFORMS=cpu \
+&& ConfigName=pi05_recolor_pika_umi_collect_blocks_1_debug_v21 \
+&& LogName=pi05_recolor_pika_umi_collect_blocks_1_debug_v21 \
+&& uv run --project examples/realman_pika --no-sync python \
+examples/realman_pika/subset_lerobot_dataset.py \
+--input Zehao123/pika_collect_blocks_224_224_visualprompt_new_0824 \
+--repo-id Zehao123/pi05_recolor_pika_umi_collect_blocks_1_debug_v21 \
+--num-episodes 1 \
+--overwrite \
+&& uv run --project . scripts/compute_norm_stats.py --config-name=${ConfigName} \
+&& mkdir -p Logs/train \
+&& uv run --project . scripts/train.py ${ConfigName} \
+--exp-name=${LogName} \
+--fsdp-devices=1 \
+--num-workers=0 \
+--overwrite \
+2>&1 | tee Logs/train/${LogName}.log
+'

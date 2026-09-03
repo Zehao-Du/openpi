@@ -28,16 +28,12 @@ class PolynomialCameraMapping:
         destination_normalized_y: np.ndarray,
     ) -> None:
         self.source_size_wh = self.validate_size(source_size_wh, "source_size_wh")
-        self.destination_size_wh = self.validate_size(
-            destination_size_wh, "destination_size_wh"
-        )
+        self.destination_size_wh = self.validate_size(destination_size_wh, "destination_size_wh")
         self.term_powers_xy = np.asarray(term_powers_xy, dtype=np.int64)
         self.destination_normalized_x = np.asarray(destination_normalized_x, dtype=np.float64)
         self.destination_normalized_y = np.asarray(destination_normalized_y, dtype=np.float64)
         if self.term_powers_xy.ndim != 2 or self.term_powers_xy.shape[1] != 2:
-            raise ValueError(
-                f"term_powers_xy must have shape (N, 2), got {self.term_powers_xy.shape}"
-            )
+            raise ValueError(f"term_powers_xy must have shape (N, 2), got {self.term_powers_xy.shape}")
         if np.any(self.term_powers_xy < 0):
             raise ValueError("term_powers_xy must contain non-negative powers")
         term_count = len(self.term_powers_xy)
@@ -45,10 +41,7 @@ class PolynomialCameraMapping:
             raise ValueError("destination_normalized_x length does not match term_powers_xy")
         if self.destination_normalized_y.shape != (term_count,):
             raise ValueError("destination_normalized_y length does not match term_powers_xy")
-        if not (
-            np.isfinite(self.destination_normalized_x).all()
-            and np.isfinite(self.destination_normalized_y).all()
-        ):
+        if not (np.isfinite(self.destination_normalized_x).all() and np.isfinite(self.destination_normalized_y).all()):
             raise ValueError("Camera mapping coefficients must be finite")
 
     @staticmethod
@@ -68,9 +61,7 @@ class PolynomialCameraMapping:
             raise ValueError(f"Unsupported camera mapping model in {path}: {data.get('model')!r}")
         expected_normalization = "pixel_to_minus_one_plus_one_using_(size-1)"
         if data.get("normalization") != expected_normalization:
-            raise ValueError(
-                f"Unsupported camera mapping normalization in {path}: {data.get('normalization')!r}"
-            )
+            raise ValueError(f"Unsupported camera mapping normalization in {path}: {data.get('normalization')!r}")
         try:
             coefficients = data["coefficients"]
             return cls(
@@ -92,10 +83,7 @@ class PolynomialCameraMapping:
         normalized_x = 2.0 * points[..., 0] / (source_width - 1) - 1.0
         normalized_y = 2.0 * points[..., 1] / (source_height - 1) - 1.0
         terms = np.stack(
-            [
-                normalized_x**power_x * normalized_y**power_y
-                for power_x, power_y in self.term_powers_xy
-            ],
+            [normalized_x**power_x * normalized_y**power_y for power_x, power_y in self.term_powers_xy],
             axis=-1,
         )
         destination_x = terms @ self.destination_normalized_x
@@ -121,12 +109,8 @@ def resize_pad_points(
     points = np.asarray(points_xy, dtype=np.float64)
     if points.ndim < 1 or points.shape[-1] != 2:
         raise ValueError(f"points_xy must have shape (..., 2), got {points.shape}")
-    native_width, native_height = PolynomialCameraMapping.validate_size(
-        native_size_wh, "native_size_wh"
-    )
-    padded_width, padded_height = PolynomialCameraMapping.validate_size(
-        padded_size_wh, "padded_size_wh"
-    )
+    native_width, native_height = PolynomialCameraMapping.validate_size(native_size_wh, "native_size_wh")
+    padded_width, padded_height = PolynomialCameraMapping.validate_size(padded_size_wh, "padded_size_wh")
     ratio = max(native_width / padded_width, native_height / padded_height)
     resized_width = int(native_width / ratio)
     resized_height = int(native_height / ratio)
@@ -438,9 +422,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
             if not camera_name:
                 raise ValueError("camera_score_thresholds keys must be non-empty")
             if not 0.0 <= threshold <= 1.0:
-                raise ValueError(
-                    f"camera_score_thresholds[{camera_name!r}] must be between 0 and 1"
-                )
+                raise ValueError(f"camera_score_thresholds[{camera_name!r}] must be between 0 and 1")
         if video_model is None:
             if torch_module is None:
                 import torch
@@ -563,9 +545,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
         target_sizes = inputs["original_sizes"].detach().cpu().tolist()
         with self._torch.inference_mode():
             outputs = self._model(**inputs)
-        postprocess_threshold = min(
-            (self.score_threshold, *self.camera_score_thresholds.values())
-        )
+        postprocess_threshold = min((self.score_threshold, *self.camera_score_thresholds.values()))
         results = self._processor.post_process_instance_segmentation(
             outputs,
             threshold=postprocess_threshold,
@@ -579,15 +559,11 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
         for camera_name, result in zip(batch_camera_names, results, strict=True):
             result_masks = result.get("masks")
             if result_masks is not None:
-                camera_threshold = self.camera_score_thresholds.get(
-                    camera_name, self.score_threshold
-                )
+                camera_threshold = self.camera_score_thresholds.get(camera_name, self.score_threshold)
                 if camera_threshold > postprocess_threshold:
                     result_scores = result.get("scores")
                     if result_scores is None:
-                        raise ValueError(
-                            "SAM 3 result has no scores for camera-specific thresholding"
-                        )
+                        raise ValueError("SAM 3 result has no scores for camera-specific thresholding")
                     result_masks = result_masks[result_scores >= camera_threshold]
                 masks[camera_name] |= self._masks_to_numpy(result_masks, validated[camera_name].shape[:2])
         return {name: clean_mask(mask, self.min_component_area) for name, mask in masks.items()}
@@ -635,9 +611,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
             raise ValueError("No cross-camera mapping is configured")
         source_mask = np.asarray(source_mask, dtype=bool)
         if source_mask.shape != source_image_shape:
-            raise ValueError(
-                f"Source mask shape {source_mask.shape} does not match image {source_image_shape}"
-            )
+            raise ValueError(f"Source mask shape {source_mask.shape} does not match image {source_image_shape}")
         mask_yx = np.argwhere(source_mask)
         if len(mask_yx) == 0:
             raise ValueError("Cannot project an empty source mask")
@@ -722,7 +696,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
         output_masks = self._tracker_processor.post_process_masks(
             outputs.pred_masks.unsqueeze(0),
             inputs["original_sizes"],
-            mask_threshold=0.0,
+            mask_threshold=self.mask_threshold,
         )
         mask = clean_mask(
             self._masks_to_numpy(output_masks[0].squeeze(1), image.shape[:2]),
@@ -735,9 +709,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
         self, validated: dict[str, np.ndarray], masks: dict[str, np.ndarray]
     ) -> dict[str, np.ndarray]:
         """Initialize each camera, using a projected prompt for the configured destination."""
-        destination_prompt: tuple[
-            tuple[float, float], tuple[float, float, float, float]
-        ] | None = None
+        destination_prompt: tuple[tuple[float, float], tuple[float, float, float, float]] | None = None
         mapping = self.cross_camera_mapping
         if mapping is not None:
             source_name = self.mapping_source_camera
@@ -772,9 +744,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
         for camera_name, image in validated.items():
             if camera_name == self.mapping_destination_camera and destination_prompt is not None:
                 try:
-                    prompted_mask = self._start_tracker_with_spatial_prompt(
-                        camera_name, image, *destination_prompt
-                    )
+                    prompted_mask = self._start_tracker_with_spatial_prompt(camera_name, image, *destination_prompt)
                     if prompted_mask.any():
                         masks[camera_name] = prompted_mask
                     else:
@@ -784,9 +754,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
                         )
                         self._start_tracker(camera_name, image, masks[camera_name])
                 except Exception:
-                    logger.exception(
-                        "SAM 3 spatial prompt failed for %s; using its detector mask", camera_name
-                    )
+                    logger.exception("SAM 3 spatial prompt failed for %s; using its detector mask", camera_name)
                     self._start_tracker(camera_name, image, masks[camera_name])
             else:
                 self._start_tracker(camera_name, image, masks[camera_name])
@@ -795,34 +763,49 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
     def _cache_tracker_vision_features(self, session: Any, frame_idx: int) -> None:
         """Cache shared SAM3 backbone features without running text detection."""
         pixel_values = session.get_frame(frame_idx).unsqueeze(0).to(self.device)
+        vision_features = self._compute_tracker_vision_features(pixel_values)
+        session.cache.cache_vision_features(frame_idx, vision_features)
+
+    def _compute_tracker_vision_features(self, pixel_values: Any) -> dict[str, Any]:
+        """Compute tracker backbone features once so compatible sessions can reuse them."""
         with self._torch.inference_mode():
             vision_embeds = self._model.get_vision_features(pixel_values=pixel_values)
             vision_feats, vision_pos_embeds = self._video_model.get_vision_features_for_tracker(
                 vision_embeds=vision_embeds
             )
-        session.cache.cache_vision_features(
-            frame_idx,
-            {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds},
-        )
+        return {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
 
-    def _track_frame(self, camera_name: str, image: np.ndarray) -> np.ndarray:
-        session = self._sessions[camera_name]
-        if session is None:
-            return np.zeros(image.shape[:2], dtype=bool)
+    def prepare_tracker_frame(self, image: np.ndarray) -> tuple[Any, Any, dict[str, Any]]:
+        """Preprocess a frame and compute features that may be shared by multiple trackers."""
         inputs = self._tracker_processor(
             images=image,
             return_tensors="pt",
             size={"height": self.model_input_size, "width": self.model_input_size},
         )
         pixel_values = inputs["pixel_values"].to(self.device)
+        return inputs["original_sizes"], pixel_values, self._compute_tracker_vision_features(pixel_values)
+
+    def _track_frame(
+        self,
+        camera_name: str,
+        image: np.ndarray,
+        prepared_frame: tuple[Any, Any, dict[str, Any]] | None = None,
+    ) -> np.ndarray:
+        session = self._sessions[camera_name]
+        if session is None:
+            return np.zeros(image.shape[:2], dtype=bool)
+        if prepared_frame is None:
+            original_sizes, pixel_values, vision_features = self.prepare_tracker_frame(image)
+        else:
+            original_sizes, pixel_values, vision_features = prepared_frame
         frame_idx = session.add_new_frame(pixel_values)
-        self._cache_tracker_vision_features(session, frame_idx)
+        session.cache.cache_vision_features(frame_idx, vision_features)
         with self._torch.inference_mode():
             outputs = self._tracker_model(inference_session=session, frame_idx=frame_idx)
         masks = self._tracker_processor.post_process_masks(
             outputs.pred_masks.unsqueeze(0),
-            inputs["original_sizes"],
-            mask_threshold=0.0,
+            original_sizes,
+            mask_threshold=self.mask_threshold,
         )
         return clean_mask(
             self._masks_to_numpy(masks[0].squeeze(1), image.shape[:2]),
@@ -845,9 +828,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
                     source_image_shape=validated[source_name].shape[:2],
                     destination_image_shape=validated[destination_name].shape[:2],
                 )
-                mask = self._start_tracker_with_spatial_prompt(
-                    destination_name, validated[destination_name], *prompt
-                )
+                mask = self._start_tracker_with_spatial_prompt(destination_name, validated[destination_name], *prompt)
                 if mask.any():
                     return mask
             except Exception:
@@ -901,9 +882,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
                 reference = current_area
 
         if current_area >= reference * self.redetect_area_ratio:
-            self._mask_area_reference = max(
-                current_area, reference * self.redetect_reference_decay
-            )
+            self._mask_area_reference = max(current_area, reference * self.redetect_reference_decay)
         return masks
 
     def preprocess(self, images: Mapping[str, np.ndarray]) -> dict[str, np.ndarray]:
@@ -912,9 +891,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
         if not validated:
             return originals
         if self._frame_index > 0 and set(validated) != set(self._sessions):
-            raise ValueError(
-                f"Camera keys changed within an episode: {set(self._sessions)} -> {set(validated)}"
-            )
+            raise ValueError(f"Camera keys changed within an episode: {set(self._sessions)} -> {set(validated)}")
 
         started = time.perf_counter()
         try:
@@ -922,10 +899,7 @@ class Sam3EpisodeTrackerPreprocessor(Sam3RecolorPreprocessor):
                 masks = self._detect_first_frame(validated)
                 masks = self._initialize_first_frame_trackers(validated, masks)
             else:
-                masks = {
-                    camera_name: self._track_frame(camera_name, image)
-                    for camera_name, image in validated.items()
-                }
+                masks = {camera_name: self._track_frame(camera_name, image) for camera_name, image in validated.items()}
             masks = self._maybe_redetect_shrunken_mask(validated, masks)
         except Exception:
             self.last_elapsed_ms = (time.perf_counter() - started) * 1000.0

@@ -9,22 +9,22 @@ single-grasp dataset is created.
 
 Usage:
 uv run --project examples/realman_pika python \
-    examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
+    examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824
 
 Validate episode discovery and state arrays without loading SAM 3:
 uv run --project examples/realman_pika python \
-    examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
+    examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824 --test-mode
 
 Classify every episode without loading SAM 3 or writing a dataset:
 uv run --project examples/realman_pika python \
-    examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
+    examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824 --classify-only
 
 Customize SAM 3 and the offline batch size:
 uv run --project examples/realman_pika python \
-    examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
+    examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824 \
     --sam-batch-size 8 \
     --sam3.checkpoint ../foundation_models/SAM3 \
@@ -43,8 +43,13 @@ import json
 from pathlib import Path
 import re
 import shutil
+import sys
 import tempfile
 from typing import Any
+
+# Direct execution puts only ``collect_block`` on sys.path. Add the parent so
+# shared modules in ``examples/realman_pika`` remain importable with --no-sync.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import h5py
 from image_preprocessing import ImagePreprocessor
@@ -64,9 +69,7 @@ from split_pika_data_by_grasp import detect_grasp_cycles
 from tqdm.auto import tqdm
 import tyro
 
-DEFAULT_DATA_DIR = Path(
-    "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks_0824"
-)
+DEFAULT_DATA_DIR = Path("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks_0824")
 DEFAULT_REPO_ID = "Zehao123/pika_collect_blocks_224_224_visualprompt_new_0824"
 DEFAULT_SAM3_CHECKPOINT = Path(__file__).resolve().parents[3] / "foundation_models" / "SAM3"
 TASK_PROMPT_TEMPLATE = "grasp the {color} block and place it into the drawer"
@@ -95,7 +98,7 @@ COLOR_HUE_RANGES: dict[str, tuple[tuple[float, float], ...]] = {
 class Sam3Config:
     checkpoint: Path = DEFAULT_SAM3_CHECKPOINT
     prompts: tuple[str, ...] = ("{color} block",)
-    target_rgb: tuple[int, int, int] = (0, 0, 255)
+    target_rgb: tuple[int, int, int] = (255, 255, 0)
     device: str = "cuda"
     score_threshold: float = 0.5
     fisheye_score_threshold: float = 0.4
@@ -159,6 +162,7 @@ class Args:
     push_to_hub: bool = False
     test_mode: bool = False
     classify_only: bool = False
+    overwrite: bool = False
     sam3: Sam3Config = dataclasses.field(default_factory=Sam3Config)
     color_detection: ColorDetectionConfig = dataclasses.field(default_factory=ColorDetectionConfig)
     split: SplitConfig = dataclasses.field(default_factory=SplitConfig)
@@ -636,12 +640,14 @@ def _preprocess_frame_batch(
         processed = image_preprocessor.preprocess(images)
     if set(processed) != set(images):
         raise ValueError(f"SAM 3 changed image keys from {set(images)} to {set(processed)}")
+    native_output = getattr(image_preprocessor, "output_native_resolution", False)
     for key, image in processed.items():
         image_array = np.asarray(image)
-        if image_array.shape != (IMAGE_SIZE, IMAGE_SIZE, 3) or image_array.dtype != np.uint8:
+        expected_shape = images[key].shape if native_output else (IMAGE_SIZE, IMAGE_SIZE, 3)
+        if image_array.shape != expected_shape or image_array.dtype != np.uint8:
             raise ValueError(
                 f"SAM 3 returned {key!r} with shape/dtype {image_array.shape}/{image_array.dtype}; "
-                f"expected {(IMAGE_SIZE, IMAGE_SIZE, 3)}/uint8"
+                f"expected {expected_shape}/uint8"
             )
         processed[key] = image_array
     return images, processed
@@ -652,9 +658,7 @@ def _grasp_detection_anchor_index(state: np.ndarray, grasp_close_local_index: in
     if state.ndim != 2 or state.shape[1] < 3 or len(state) == 0:
         raise ValueError(f"Expected a non-empty (T, >=3) state array, got {state.shape}")
     if not 0 <= grasp_close_local_index < len(state):
-        raise ValueError(
-            f"Grasp close index {grasp_close_local_index} is outside an episode with {len(state)} frames"
-        )
+        raise ValueError(f"Grasp close index {grasp_close_local_index} is outside an episode with {len(state)} frames")
     return int(np.argmin(state[: grasp_close_local_index + 1, 2]))
 
 
@@ -663,12 +667,8 @@ def _detection_candidate_local_indices(episode_length: int, preferred_anchor: in
     if episode_length < 1:
         raise ValueError(f"Episode length must be positive, got {episode_length}")
     if not 0 <= preferred_anchor < episode_length:
-        raise ValueError(
-            f"Detection anchor {preferred_anchor} is outside an episode with {episode_length} frames"
-        )
-    return tuple(
-        sorted(range(episode_length), key=lambda index: (abs(index - preferred_anchor), index))
-    )
+        raise ValueError(f"Detection anchor {preferred_anchor} is outside an episode with {episode_length} frames")
+    return tuple(sorted(range(episode_length), key=lambda index: (abs(index - preferred_anchor), index)))
 
 
 def _write_episode_frames(
@@ -687,20 +687,18 @@ def _write_episode_frames(
     episode_length = len(state)
     if not 0 <= detection_anchor_local_index < episode_length:
         raise ValueError(
-            f"Detection anchor {detection_anchor_local_index} is outside an episode with "
-            f"{episode_length} frames"
+            f"Detection anchor {detection_anchor_local_index} is outside an episode with {episode_length} frames"
         )
 
     originals_by_key: dict[str, np.ndarray] = {}
     processed_by_key: dict[str, np.ndarray] = {}
 
     with tqdm(total=episode_length, desc=output_name, unit="frame", leave=False) as frame_progress:
+
         def process_sequence(source_indices: Sequence[int], *, store: bool) -> None:
             for batch_start in range(0, len(source_indices), sam_batch_size):
                 batch_indices = source_indices[batch_start : batch_start + sam_batch_size]
-                originals, processed = _preprocess_frame_batch(
-                    episode_dir, file, batch_indices, image_preprocessor
-                )
+                originals, processed = _preprocess_frame_batch(episode_dir, file, batch_indices, image_preprocessor)
                 if store:
                     originals_by_key.update(originals)
                     processed_by_key.update(processed)
@@ -712,9 +710,7 @@ def _write_episode_frames(
                 raise TypeError("A sequential image preprocessor must provide start_episode()")
             has_active_trackers = getattr(image_preprocessor, "has_active_trackers", None)
             if not callable(has_active_trackers):
-                raise TypeError(
-                    "A sequential image preprocessor must provide has_active_trackers()"
-                )
+                raise TypeError("A sequential image preprocessor must provide has_active_trackers()")
 
             source_end = source_start + episode_length
             anchor_source_index: int | None = None
@@ -896,23 +892,6 @@ def _make_manifest(
     return manifest
 
 
-def _confirm_preview_video_overwrite(preview_video_path: Path) -> bool:
-    if not preview_video_path.is_file():
-        raise IsADirectoryError(f"Preview video path exists but is not a file: {preview_video_path}")
-    try:
-        response = input(
-            f"Preview video already exists: {preview_video_path}\n"
-            "Overwrite it? [y/N]: "
-        )
-    except EOFError:
-        print("No interactive input is available. Aborting without overwriting the preview video.")
-        return False
-    if response.strip().lower() not in {"y", "yes"}:
-        print("Aborted. The existing preview video was not modified.")
-        return False
-    return True
-
-
 def main(args: Args) -> None:
     if args.sam_batch_size < 1:
         raise ValueError(f"--sam-batch-size must be at least 1, got {args.sam_batch_size}")
@@ -921,12 +900,11 @@ def main(args: Args) -> None:
     if args.max_episodes is not None and args.max_episodes < 1:
         raise ValueError(f"--max-episodes must be at least 1, got {args.max_episodes}")
     preview_video_path = args.preview_video.expanduser().resolve() if args.preview_video else None
-    if (
-        preview_video_path is not None
-        and preview_video_path.exists()
-        and not _confirm_preview_video_overwrite(preview_video_path)
-    ):
-        return
+    if preview_video_path is not None and preview_video_path.exists():
+        if not preview_video_path.is_file():
+            raise IsADirectoryError(f"Preview video path exists but is not a file: {preview_video_path}")
+        if not args.overwrite:
+            raise FileExistsError(f"Preview video exists: {preview_video_path}; pass --overwrite to replace it")
 
     data_path = _resolve_data_path(args.data_dir)
     episode_dirs = _find_episode_dirs(data_path, test_mode=args.test_mode)
@@ -976,17 +954,8 @@ def main(args: Args) -> None:
     }
 
     output_path = HF_LEROBOT_HOME / args.repo_id
-    overwrite = False
-    if output_path.exists():
-        try:
-            response = input(f"Output directory already exists: {output_path}\nOverwrite it? [y/N]: ")
-        except EOFError:
-            print("No interactive input is available. Aborting without overwriting the dataset.")
-            return
-        if response.strip().lower() not in {"y", "yes"}:
-            print("Aborted. The existing dataset was not modified.")
-            return
-        overwrite = True
+    if output_path.exists() and not args.overwrite:
+        raise FileExistsError(f"Output dataset exists: {output_path}; pass --overwrite to replace it")
 
     # Validate and load SAM 3 before touching any existing output dataset.
     image_preprocessor = _make_preprocessor(args.sam3, prompts_by_episode[0])
@@ -1024,9 +993,7 @@ def main(args: Args) -> None:
                         raise ValueError(f"{episode_dir}: camera/state length mismatch")
                     state = _read_state(file, episode_slice.cycle.start, episode_slice.cycle.end)
                     grasp_close_local_index = episode_slice.cycle.close - episode_slice.cycle.start
-                    detection_anchor_local_index = _grasp_detection_anchor_index(
-                        state, grasp_close_local_index
-                    )
+                    detection_anchor_local_index = _grasp_detection_anchor_index(state, grasp_close_local_index)
                     tqdm.write(
                         f"{episode_slice.output_name}: SAM 3 anchor source frame "
                         f"{episode_slice.cycle.start + detection_anchor_local_index} "
@@ -1048,9 +1015,7 @@ def main(args: Args) -> None:
                     )
                 if episode_written:
                     dataset.save_episode()
-                    manifest_entry = dict(
-                        manifest_by_output_index[episode_slice.output_index]
-                    )
+                    manifest_entry = dict(manifest_by_output_index[episode_slice.output_index])
                     manifest_entry["planned_episode"] = manifest_entry["episode"]
                     manifest_entry["episode"] = f"episode{len(saved_manifest)}"
                     saved_manifest.append(manifest_entry)
@@ -1074,7 +1039,7 @@ def main(args: Args) -> None:
             json.dump(saved_manifest, manifest_file, indent=2)
             manifest_file.write("\n")
 
-        if overwrite:
+        if output_path.exists():
             shutil.rmtree(output_path)
         shutil.move(staging_v21, output_path)
 

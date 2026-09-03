@@ -80,6 +80,9 @@ class Args(visualprompt.Args):
     append_from_repo_id: str | None = None
     append_lerobot_repo_id: str | None = None
     split: splitter.SplitConfig = dataclasses.field(default_factory=splitter.SplitConfig)
+    keypoint: visualprompt.KeypointConfig = dataclasses.field(
+        default_factory=lambda: visualprompt.KeypointConfig(dynamic_radius=True)
+    )
 
 
 def _find_episode_dirs(data_dir: Path) -> list[Path]:

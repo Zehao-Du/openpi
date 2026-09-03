@@ -11,6 +11,14 @@ import pytest
 import visualprompt_convert_pika_data_to_lerobot as converter
 
 
+def test_default_recolor_target_is_yellow() -> None:
+    assert converter.Sam3Config().target_rgb == (255, 255, 0)
+
+
+def test_dataset_overwrite_requires_explicit_flag() -> None:
+    assert converter.Args().overwrite is False
+
+
 class _FakePreprocessor:
     def __init__(self) -> None:
         self.calls: list[dict[str, np.ndarray]] = []
@@ -238,32 +246,6 @@ def test_preview_video_writer_encodes_mp4(tmp_path: Path) -> None:
     assert output_path.stat().st_size > 0
     with av.open(str(output_path)) as container:
         assert sum(1 for _ in container.decode(video=0)) == 2
-
-
-@pytest.mark.parametrize(
-    ("response", "expected"),
-    [("y", True), ("YES", True), ("n", False), ("", False)],
-)
-def test_existing_preview_video_asks_before_overwrite(
-    tmp_path: Path,
-    monkeypatch: pytest.MonkeyPatch,
-    response: str,
-    expected: object,
-) -> None:
-    preview_path = tmp_path / "preview.mp4"
-    preview_path.write_bytes(b"existing video")
-    monkeypatch.setattr("builtins.input", lambda _: response)
-
-    assert converter._confirm_preview_video_overwrite(preview_path) is expected  # noqa: SLF001
-    assert preview_path.read_bytes() == b"existing video"
-
-
-def test_preview_video_overwrite_rejects_directory(tmp_path: Path) -> None:
-    preview_directory = tmp_path / "preview.mp4"
-    preview_directory.mkdir()
-
-    with pytest.raises(IsADirectoryError, match="not a file"):
-        converter._confirm_preview_video_overwrite(preview_directory)  # noqa: SLF001
 
 
 def test_preprocess_batch_rejects_invalid_image_shape(monkeypatch: pytest.MonkeyPatch) -> None:

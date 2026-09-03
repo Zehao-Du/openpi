@@ -1,0 +1,50 @@
+#
+# 0829
+#
+
+#!/bin/bash
+
+/bin/bash -lc '
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& ConfigName=pi05_realmanpika_umi_0829_pullstick_200 \
+&& LogName=pi05_realmanpika_umi_0829_pullstick_200 \
+&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run scripts/train.py ${ConfigName} \
+--exp-name=${LogName} \
+--fsdp-devices=8 \
+--num-workers=8 \
+--resume \
+--num-train-steps=100000 \
+2>&1 | tee -a Logs/train/${LogName}.log
+'
+
+# keypoint
+
+#!/bin/bash
+
+/bin/bash -lc '
+set -eo pipefail
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& ConfigName=pi05_keypoint_pika_pull_stick_1437_v21 \
+&& LogName=pi05_keypoint_pika_pull_stick_1437_v21 \
+&& mkdir -p Logs/train \
+&& XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run --project . scripts/train.py \
+pi05_keypoint_pika_pull_stick_1437_v21 \
+--exp-name=pi05_keypoint_pika_pull_stick_1437_v21 \
+--fsdp-devices=8 \
+--num-workers=8 \
+--num-train-steps=100000 \
+--resume \
+2>&1 | tee -a Logs/train/pi05_keypoint_pika_pull_stick_1437_v21.log
+'

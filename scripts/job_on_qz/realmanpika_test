@@ -1,0 +1,32 @@
+#!/bin/bash
+
+policy_config=pi05_recolor_pika_umi_collect_blocks_125_v21
+policy_checkpoint=checkpoints/pi05_recolor_pika_umi_collect_blocks_125_v21/pi05_recolor_pika_umi_collect_blocks_125_v21/20000
+
+# 一键启动 policy server 和公网映射
+POLICY_CONFIG="$policy_config" POLICY_CHECKPOINT="$policy_checkpoint" \
+    bash scripts/job_on_qz/realmanpika_test_one_click
+exit $?
+
+# 启动 policy server（复制到一个终端执行）
+/bin/bash -lc '
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& uv run --project . scripts/serve_policy.py \
+    --port 8000 \
+    policy:checkpoint \
+    --policy.config pi05_recolor_pika_umi_collect_blocks_125_v21 \
+    --policy.dir checkpoints/pi05_recolor_pika_umi_collect_blocks_125_v21/pi05_recolor_pika_umi_collect_blocks_125_v21/20000
+'
+
+# 将 server 的 8000 端口映射到公网（复制到另一个终端执行）
+curl -L --fail --retry 3 \
+  https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+  -o /tmp/cloudflared \
+&& chmod 755 /tmp/cloudflared \
+&& /tmp/cloudflared tunnel --no-autoupdate --url http://127.0.0.1:8000

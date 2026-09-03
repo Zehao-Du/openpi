@@ -2,15 +2,15 @@
 Script for converting a pika collected dataset to LeRobot format.
 
 Usage:
-uv run examples/realman_pika/convert_pika_data_to_lerobot.py \
+uv run examples/realman_pika/collect_block/convert_pika_data_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824
 
 List matched episodes without converting anything:
-uv run examples/realman_pika/convert_pika_data_to_lerobot.py \
+uv run examples/realman_pika/collect_block/convert_pika_data_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824 --test-mode
 
 If you want to push your dataset to the Hugging Face Hub, you can use the following command:
-uv run examples/realman_pika/convert_pika_data_to_lerobot.py \
+uv run examples/realman_pika/collect_block/convert_pika_data_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824 --push-to-hub
 
 The resulting dataset will get saved to the $HF_LEROBOT_HOME directory.

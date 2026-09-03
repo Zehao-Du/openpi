@@ -1,0 +1,55 @@
+#!/bin/bash
+
+/bin/bash -lc '
+set -eo pipefail
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi
+source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh
+conda activate zehao_openpi
+export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi
+export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH"
+export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot
+export WANDB_MODE=offline
+ConfigName=pi05_recolor_pika_umi_collect_blocks_107_v21
+LogName=pi05_recolor_pika_umi_collect_blocks_107_v21
+KeepalivePgid=""
+
+cleanup_keepalive() {
+    if [[ -n "${KeepalivePgid}" ]] && kill -0 -- "-${KeepalivePgid}" 2>/dev/null; then
+        kill -TERM -- "-${KeepalivePgid}" 2>/dev/null || true
+        for _ in {1..10}; do
+            kill -0 -- "-${KeepalivePgid}" 2>/dev/null || break
+            sleep 1
+        done
+        kill -KILL -- "-${KeepalivePgid}" 2>/dev/null || true
+    fi
+    if [[ -n "${KeepalivePgid}" ]]; then
+        wait "${KeepalivePgid}" 2>/dev/null || true
+    fi
+    KeepalivePgid=""
+}
+trap cleanup_keepalive EXIT
+
+mkdir -p Logs/data Logs/train
+setsid uv run --project . python scripts/job_on_qz/gpu_keepalive.py \
+    > "Logs/data/${LogName}_gpu_keepalive.log" 2>&1 &
+KeepalivePgid=$!
+
+uv run --project examples/realman_pika --no-sync python \
+    examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
+    --data-dir /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks_0824 \
+    --repo-id Zehao123/pi05_recolor_pika_umi_collect_blocks_107_v21 \
+    --max-episodes 107 \
+    --sam3.target-rgb 255 255 0 \
+    --overwrite
+
+uv run --project . scripts/compute_norm_stats.py --config-name=${ConfigName}
+cleanup_keepalive
+trap - EXIT
+
+XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 uv run --project . scripts/train.py ${ConfigName} \
+    --exp-name=${LogName} \
+    --fsdp-devices=8 \
+    --num-workers=8 \
+    --overwrite \
+    2>&1 | tee "Logs/train/${LogName}.log"
+'

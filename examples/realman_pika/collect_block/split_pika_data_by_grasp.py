@@ -8,7 +8,7 @@ copied.
 
 Example:
 uv run --project examples/realman_pika python \
-    examples/realman_pika/split_pika_data_by_grasp.py \
+    examples/realman_pika/collect_block/split_pika_data_by_grasp.py \
     --data-dir /absolute/path/to/collect_blocks \
     --output-dir /absolute/path/to/collect_blocks_single_grasp
 

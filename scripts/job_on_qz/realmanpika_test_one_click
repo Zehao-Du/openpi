@@ -1,0 +1,134 @@
+#!/bin/bash
+# Usage: bash scripts/job_on_qz/realmanpika_test_one_click checkpoints/<config>/<run>/<step>
+
+set -euo pipefail
+
+usage() {
+    echo "Usage: $0 POLICY_CHECKPOINT" >&2
+    echo "Example: $0 checkpoints/pi05_recolor_pika_umi_collect_blocks_125_v21/pi05_recolor_pika_umi_collect_blocks_125_v21/20000" >&2
+}
+
+if [[ ${1:-} == "-h" || ${1:-} == "--help" ]]; then
+    usage
+    exit 0
+fi
+if (( $# > 1 )); then
+    usage
+    exit 2
+fi
+
+# Keep the checkpoint-family-to-policy-config relationship here so callers only
+# need to provide a checkpoint path. The key must be a directory component in
+# the checkpoint path (normally the first directory below checkpoints/).
+declare -A checkpoint_policy_configs=(
+    [pi05_realmanpika_umi]=pi05_realmanpika_umi
+    [pi05_realmanpika_umi_0824]=pi05_realmanpika_umi_0824
+    [pi05_realmanpika_umi_0826]=pi05_realmanpika_umi_0826
+    [pi05_realmanpika_umi_0828]=pi05_realmanpika_umi_0828
+    [pi05_realmanpika_umi_0829_pullstick_200]=pi05_realmanpika_umi_0829_pullstick_200
+    [pi05_pika_umi_collect_blocks_125_v21]=pi05_pika_umi_collect_blocks_125_v21
+    [pi05_pika_umi_collect_blocks_107_v21]=pi05_pika_umi_collect_blocks_107_v21
+    [pi05_pika_umi_collect_blocks_88_v21]=pi05_pika_umi_collect_blocks_88_v21
+    [pi05_pika_umi_collect_blocks_1_debug_v21]=pi05_pika_umi_collect_blocks_1_debug_v21
+    [pi05_recolor_pika_umi_collect_blocks_125_v21]=pi05_recolor_pika_umi_collect_blocks_125_v21
+    [pi05_recolor_pika_umi_collect_blocks_107_v21]=pi05_recolor_pika_umi_collect_blocks_107_v21
+    [pi05_recolor_pika_umi_collect_blocks_88_v21]=pi05_recolor_pika_umi_collect_blocks_88_v21
+    [pi05_recolor_pika_umi_collect_blocks_1_debug_v21]=pi05_recolor_pika_umi_collect_blocks_1_debug_v21
+    [visualprompt_pi05_realmanpika_umi]=visualprompt_pi05_realmanpika_umi
+    [visualprompt_pi05_realmanpika_umi_new]=visualprompt_pi05_realmanpika_umi_new
+    [visualprompt_pi05_realmanpika_umi_new_0824]=visualprompt_pi05_realmanpika_umi_new_0824
+    [visualprompt_pi05_realmanpika_umi_keypoint_0828]=visualprompt_pi05_realmanpika_umi_keypoint_0828
+    [visualprompt_keypoint_pi05_realmanpika_umi_0829_pullstick_200]=visualprompt_keypoint_pi05_realmanpika_umi_0829_pullstick_200
+    [pi05_keypoint_pika_pull_stick_1437_v21]=pi05_keypoint_pika_pull_stick_1437_v21
+    [pi05_keypoint_pika_pull_stick_351_0902_v21]=pi05_keypoint_pika_pull_stick_351_0902_v21
+    [pi05_keypoint_pika_pull_stick_1_debug_v21]=pi05_keypoint_pika_pull_stick_1_debug_v21
+    [pi05_recolor_pika_pull_stick_200_0831_v21]=pi05_recolor_pika_pull_stick_200_0831_v21
+    [pi05_recolor_pika_pull_stick_1_debug_0831_v21]=pi05_recolor_pika_pull_stick_1_debug_0831_v21
+)
+
+policy_checkpoint=${1:-${POLICY_CHECKPOINT:-}}
+if [[ -z "$policy_checkpoint" ]]; then
+    usage
+    exit 2
+fi
+
+policy_config=""
+for checkpoint_family in "${!checkpoint_policy_configs[@]}"; do
+    if [[ "/$policy_checkpoint/" == *"/$checkpoint_family/"* ]]; then
+        policy_config=${checkpoint_policy_configs[$checkpoint_family]}
+        break
+    fi
+done
+if [[ -z "$policy_config" ]]; then
+    echo "Unknown policy checkpoint: $policy_checkpoint" >&2
+    echo "Add its checkpoint family and policy config to checkpoint_policy_configs in $0." >&2
+    exit 2
+fi
+
+printf -v quoted_policy_config '%q' "$policy_config"
+printf -v quoted_policy_checkpoint '%q' "$policy_checkpoint"
+
+echo "Policy config: $policy_config"
+echo "Policy checkpoint: $policy_checkpoint"
+
+server_session=realmanpika_server
+tunnel_session=realmanpika_cloudflare
+server_log=/tmp/realmanpika_server.log
+tunnel_log=/tmp/realmanpika_cloudflare.log
+cloudflared_bin=/tmp/cloudflared
+
+if [[ ! -x "$cloudflared_bin" ]]; then
+    curl -L --fail --retry 3 \
+        https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-amd64 \
+        -o "$cloudflared_bin"
+    chmod 755 "$cloudflared_bin"
+fi
+
+if tmux has-session -t "$server_session" 2>/dev/null; then
+    echo "Policy server tmux session already exists: $server_session"
+else
+    : >"$server_log"
+    server_command='
+cd /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi &&
+source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh &&
+conda activate zehao_openpi &&
+export OPENPI_ROOT=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi &&
+export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" &&
+export HF_LEROBOT_HOME=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/lerobot &&
+export WANDB_MODE=offline &&
+exec uv run --project . scripts/serve_policy.py \
+    --port 8000 \
+    policy:checkpoint \
+    --policy.config __POLICY_CONFIG__ \
+    --policy.dir __POLICY_CHECKPOINT__
+'
+    server_command=${server_command/__POLICY_CONFIG__/$quoted_policy_config}
+    server_command=${server_command/__POLICY_CHECKPOINT__/$quoted_policy_checkpoint}
+    tmux new-session -d -s "$server_session" "$server_command >>$server_log 2>&1"
+    echo "Started policy server tmux session: $server_session"
+fi
+
+if tmux has-session -t "$tunnel_session" 2>/dev/null; then
+    echo "Cloudflare tmux session already exists: $tunnel_session"
+else
+    : >"$tunnel_log"
+    tmux new-session -d -s "$tunnel_session" \
+        "exec $cloudflared_bin tunnel --no-autoupdate --url http://127.0.0.1:8000 >>$tunnel_log 2>&1"
+    echo "Started Cloudflare tmux session: $tunnel_session"
+fi
+
+for ((attempt = 1; attempt <= 30; attempt++)); do
+    public_url=$(rg -o "https://[a-z0-9-]+\.trycloudflare\.com" "$tunnel_log" 2>/dev/null | tail -n 1 || true)
+    if [[ -n "$public_url" ]]; then
+        echo "Public WebSocket URL: ${public_url/https:\/\//wss://}"
+        break
+    fi
+    sleep 1
+done
+
+if [[ -z "${public_url:-}" ]]; then
+    echo "Tunnel URL is not available yet. Check: tmux capture-pane -pt $tunnel_session"
+fi
+
+echo "Server log: $server_log"
+echo "Tunnel log: $tunnel_log"

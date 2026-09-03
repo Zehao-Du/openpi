@@ -1,0 +1,104 @@
+#
+# 08-31
+#
+
+server
+
+# 4 抽木棍
+--policy.config pi05_realmanpika_umi_0829_pullstick_200
+--policy.dir checkpoints/pi05_realmanpika_umi_0829_pullstick_200/pi05_realmanpika_umi_200/30000    
+
+# 5 抽木棍
+--policy.config pi05_realmanpika_umi_0829_pullstick_200
+--policy.dir checkpoints/pi05_realmanpika_umi_0829_pullstick_200/pi05_realmanpika_umi_200/50000  
+
+# 1 小方块 √
+--policy.config pi05_pika_umi_collect_blocks_125_v21
+--policy.dir checkpoints/pi05_pika_umi_collect_blocks_125_v21/pi05_pika_umi_collect_blocks_125_v21/20000
+
+# 2 小方块 √
+--policy.config pi05_recolor_pika_umi_collect_blocks_125_v21
+--policy.dir checkpoints/pi05_recolor_pika_umi_collect_blocks_125_v21/pi05_recolor_pika_umi_collect_blocks_125_v21/20000
+
+# 3 小方块 √
+--policy.config visualprompt_pi05_realmanpika_umi_new
+--policy.dir checkpoints/visualprompt_pi05_realmanpika_umi_new/realmanpika_umi_CollectBlocks_visualprompt_new/20000
+
+
+#
+# 09-02
+#
+
+# 1 抽木棍, pi05, 200 episode data, 30k iteration
+--policy.config pi05_realmanpika_umi_0829_pullstick_200
+--policy.dir checkpoints/pi05_realmanpika_umi_0829_pullstick_200/pi05_realmanpika_umi_200/30000    
+
+# 2 抽木棍, pi05, 200 episode data, 50k iteration
+# 测试三次：两次没抓到木棍；一次抽出一根木棍，抽出之后木棍堆倒塌
+--policy.config pi05_realmanpika_umi_0829_pullstick_200
+--policy.dir checkpoints/pi05_realmanpika_umi_0829_pullstick_200/pi05_realmanpika_umi_200/50000  
+#成功一次 141257
+
+# 3 抽木棍, pi05, 200 episode data, 80k iteration
+# 测试三次：一次没抓到木棍；两个夹住木棍但是没抽出来
+--policy.config pi05_realmanpika_umi_0829_pullstick_200
+--policy.dir checkpoints/pi05_realmanpika_umi_0829_pullstick_200/pi05_realmanpika_umi_200/80000 
+#夹到两次但又松掉 143241
+
+# 4 抽木棍, pi05, 200 episode data, 100k iteration
+# 测试三次，全部没抓到木棍
+--policy.config pi05_realmanpika_umi_0829_pullstick_200
+--policy.dir checkpoints/pi05_realmanpika_umi_0829_pullstick_200/pi05_realmanpika_umi_200/99999
+#失败 132815
+
+# 5 抽木棍, visual prompt -- keypoint, 200 episode data, 60k iteration (如果pi05成功，测试对应iteration数量的ckpt，否则只测试这一个)
+# 测试三次，全部没抓到木棍
+--policy.config pi05_keypoint_pika_pull_stick_1437_v21
+--policy.dir checkpoints/pi05_keypoint_pika_pull_stick_1437_v21/pi05_keypoint_pika_pull_stick_1437_v21/60000
+#失败 133923
+
+#50000 失败，142457
+
+# 6 小方块, pi05, 88 episode data
+# 测试三次：一次没抓到方块；一次抓到红色小方块但是没有放到抽屉里面；一次完成了红色小方块的放置，抓到了蓝色小方块，但是没有把蓝色小方块放到抽屉里面
+--policy.config pi05_pika_umi_collect_blocks_88_v21
+--policy.dir checkpoints/pi05_pika_umi_collect_blocks_88_v21/pi05_pika_umi_collect_blocks_88_v21/29999
+# 成功（抓取一个小方块进抽屉）两次，失败一次 144933
+
+# 7 小方块, visual prompt, 88 episode data
+# 测试三次：两个没抓到方块；一次完成了红色小方块，抓到了蓝色小方块，但是没有把蓝色小方块放到抽屉里面
+--policy.config pi05_recolor_pika_umi_collect_blocks_88_v21
+--policy.dir checkpoints/pi05_recolor_pika_umi_collect_blocks_88_v21/pi05_recolor_pika_umi_collect_blocks_88_v21/29999
+# 成功（抓取一个小方块进抽屉）一次，失败两次 （而且分不清指令） 154531
+
+# 8 小方块, visual prompt, 200 episode data, 物体换成罐头，手工打标，打标成深蓝色小方块
+--policy.config visualprompt_pi05_realmanpika_umi_new
+--policy.dir checkpoints/visualprompt_pi05_realmanpika_umi_new/realmanpika_umi_CollectBlocks_visualprompt_new/20000
+#失败 /home/ubuntu/Documents/CodeField/zehao/openpi/outputs/realman_pika_recordings/20260902_163856_549132
+
+具体：
+1 抽木棍, pi05, 200 episode data, 50k iteration
+# 测试三次：两次没抓到木棍；一次抽出一根木棍，抽出之后木棍堆倒塌
+
+2 抽木棍, pi05, 200 episode data, 80k iteration
+# 测试三次：一次没抓到木棍；两个夹住木棍但是没抽出来
+
+3 抽木棍, pi05, 200 episode data, 100k iteration
+# 测试三次，全部没抓到木棍
+
+4 抽木棍, visual prompt -- keypoint, 200 episode data, 60k iteration (如果pi05成功，测试对应iteration数量的ckpt，否则只测试这一个)
+# 测试三次，全部没抓到木棍
+
+5 小方块, pi05, 88 episode data
+# 测试三次：一次没抓到方块；一次抓到红色小方块但是没有放到抽屉里面；一次完成了红色小方块的放置，抓到了蓝色小方块，但是没有把蓝色小方块放到抽屉里面
+
+6 小方块, visual prompt, 88 episode data
+# 测试三次：两个没抓到方块；一次完成了红色小方块，抓到了蓝色小方块，但是没有把蓝色小方块放到抽屉里面
+
+7 小方块, visual prompt, 200 episode data, 物体换成罐头，手工打标，打标成深蓝色小方块
+# 失败
+
+明天测试：
+1. 小方块 107 episode pi05和visual prompt 
+2. 小方块 网球，尝试打成小方块形状的mask
+3. 抽木棍，350 episode 数据 （应该能训练出来）

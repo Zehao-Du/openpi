@@ -141,7 +141,7 @@ uv run --project examples/realman_pika python examples/realman_pika/main.py \
   --host <policy-server-ip> \
   --sam3.enabled \
   --sam3.prompts "pink block" "pink cube" \
-  --sam3.target-rgb 0 0 255 \
+  --sam3.target-rgb 255 255 0 \
   --sam3.device cuda \
   --sam3.score-threshold 0.5 \
   --sam3.mask-threshold 0.5 \
@@ -169,7 +169,7 @@ Inspect all detected boundaries without writing output first:
 
 ```bash
 uv run --project examples/realman_pika python \
-  examples/realman_pika/split_pika_data_by_grasp.py \
+  examples/realman_pika/collect_block/split_pika_data_by_grasp.py \
   --data-dir /absolute/path/to/collect_blocks \
   --output-dir /absolute/path/to/collect_blocks_single_grasp \
   --dry-run
@@ -192,7 +192,7 @@ grasp colors without loading SAM 3:
 
 ```bash
 uv run --project examples/realman_pika python \
-  examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
+  examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
   --data-dir /absolute/path/to/collect_blocks \
   --classify-only
 ```
@@ -204,10 +204,11 @@ conversion with (the shown `--data-dir` is also the script default):
 
 ```bash
 uv run --project examples/realman_pika python \
-  examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
+  examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
   --data-dir /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/collect_blocks \
   --sam3.checkpoint ../foundation_models/SAM3 \
-  --sam3.device cuda
+  --sam3.device cuda \
+  --sam3.target-rgb 255 255 0
 ```
 
 The default output repo ID is
@@ -227,7 +228,9 @@ re-detected from its own image and its tracker is restarted. Re-detection has a
 and `--sam3.redetect-cooldown-frames`. Tracker state is discarded at the
 episode boundary. Both cameras are resize-padded to 224×224 before SAM 3
 and the selected block is recolored to the fixed `--sam3.target-rgb` value,
-blue by default.
+yellow by default.
+Pass `--overwrite` explicitly when replacing an existing output dataset or
+preview video.
 
 Each output frame also receives a color-specific language task such as
 `grasp the green block and place it into the drawer`. The task keeps the
@@ -239,7 +242,7 @@ separate output repo ID:
 
 ```bash
 uv run --project examples/realman_pika python \
-  examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py \
+  examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py \
   --max-episodes 1 \
   --repo-id Zehao123/pika_collect_blocks_visualprompt_preview \
   --preview-video /absolute/path/to/visualprompt_preview.mp4
@@ -265,5 +268,5 @@ single-grasp Pika dataset is needed for inspection or another pipeline.
 ## keypoint 开发步骤
 
 1. 使用uv配置环境 （lerobot使用/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/lerobot，uv自己安装）
-2. 仿照examples/realman_pika/visualprompt_convert_pika_data_to_lerobot.py，完成examples/realman_pika/keypoint_convert_pika_data_to_lerobot.py
+2. 仿照examples/realman_pika/collect_block/visualprompt_convert_pika_data_to_lerobot.py，完成examples/realman_pika/keypoint_convert_pika_data_to_lerobot.py
 3. 输出视频，参照/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/dataset/pika/visualize/collect_blocks/visualprompt_episode0.mp4（qz平台绝对路径）

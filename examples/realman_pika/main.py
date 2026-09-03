@@ -46,7 +46,7 @@ class Sam3RecolorConfig:
         "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/SAM3"
     )
     prompts: tuple[str, ...] = ("pink block",)
-    target_rgb: tuple[int, int, int] = (0, 0, 255)
+    target_rgb: tuple[int, int, int] = (255, 255, 0)
     device: str | None = None
     score_threshold: float = 0.5
     mask_threshold: float = 0.5

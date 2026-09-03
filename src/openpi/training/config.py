@@ -822,7 +822,9 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
     ),
@@ -833,7 +835,7 @@ _CONFIGS = [
         name="pi05_realmanpika_umi",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotRealmanPikaDataConfig(
-            repo_id="Zehao123/pika_collect_blocks_224_224",    # Need Change
+            repo_id="Zehao123/pika_collect_blocks_224_224",  # Need Change
             base_config=DataConfig(prompt_from_task=True),
             use_tcp_delta_actions=True,
         ),
@@ -846,7 +848,9 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
     ),
@@ -854,7 +858,7 @@ _CONFIGS = [
         name="pi05_realmanpika_umi_0824",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotRealmanPikaDataConfig(
-            repo_id="Zehao123/pika_collect_blocks_0824_224_224",    # Need Change
+            repo_id="Zehao123/pika_collect_blocks_0824_224_224",  # Need Change
             base_config=DataConfig(prompt_from_task=True),
             use_tcp_delta_actions=True,
         ),
@@ -867,15 +871,219 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi05_pika_umi_collect_blocks_125_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_pika_umi_collect_blocks_125_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi05_pika_umi_collect_blocks_107_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_pika_umi_collect_blocks_107_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi05_pika_umi_collect_blocks_88_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_pika_umi_collect_blocks_88_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi05_pika_umi_collect_blocks_1_debug_v21",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            paligemma_variant="dummy",
+            action_expert_variant="dummy",
+        ),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_pika_umi_collect_blocks_1_debug_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=1,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1,
+            peak_lr=5e-5,
+            decay_steps=10,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        # The full-model EMA copy does not fit alongside optimizer state on the local single GPU.
+        # Production training keeps EMA enabled and shards it across eight devices.
+        ema_decay=None,
+        weight_loader=weight_loaders.NoOpWeightLoader(),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=1,
+        log_interval=1,
+        save_interval=1,
+        keep_period=None,
+        wandb_enabled=False,
+    ),
+    TrainConfig(
+        name="pi05_recolor_pika_umi_collect_blocks_125_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_recolor_pika_umi_collect_blocks_125_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=100_000,
+    ),
+    TrainConfig(
+        name="pi05_recolor_pika_umi_collect_blocks_107_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_recolor_pika_umi_collect_blocks_107_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=100_000,
+    ),
+    TrainConfig(
+        name="pi05_recolor_pika_umi_collect_blocks_88_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_recolor_pika_umi_collect_blocks_88_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi05_recolor_pika_umi_collect_blocks_1_debug_v21",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            paligemma_variant="dummy",
+            action_expert_variant="dummy",
+        ),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_recolor_pika_umi_collect_blocks_1_debug_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=1,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1,
+            peak_lr=5e-5,
+            decay_steps=10,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=None,
+        weight_loader=weight_loaders.NoOpWeightLoader(),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=1,
+        log_interval=1,
+        save_interval=1,
+        keep_period=None,
+        wandb_enabled=False,
     ),
     TrainConfig(
         name="pi05_realmanpika_umi_0826",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotRealmanPikaDataConfig(
-            repo_id="Zehao123/pika_collect_blocks_0824_224_224_three_grasps_color",    # Need Change
+            repo_id="Zehao123/pika_collect_blocks_0824_224_224_three_grasps_color",  # Need Change
             base_config=DataConfig(prompt_from_task=True),
             use_tcp_delta_actions=True,
         ),
@@ -888,7 +1096,9 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
     ),
@@ -896,7 +1106,7 @@ _CONFIGS = [
         name="pi05_realmanpika_umi_0828",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotRealmanPikaDataConfig(
-            repo_id="Zehao123/pika_pull_stick_0827_merged_v21",    # Need Change
+            repo_id="Zehao123/pika_pull_stick_0827_merged_v21",  # Need Change
             base_config=DataConfig(prompt_from_task=True),
             use_tcp_delta_actions=True,
         ),
@@ -909,15 +1119,17 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
     ),
     TrainConfig(
-        name="visualprompt_pi05_realmanpika_umi",
+        name="pi05_realmanpika_umi_0829_pullstick_200",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotRealmanPikaDataConfig(
-            repo_id="Zehao123/pika_collect_blocks_224_224_visualprompt",    # Need Change
+            repo_id="Zehao123/pika_pull_stick_0828_200_v21",  # Need Change
             base_config=DataConfig(prompt_from_task=True),
             use_tcp_delta_actions=True,
         ),
@@ -930,7 +1142,35 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+    ),
+    #
+    # visual prompt pi05 realman + pika
+    #
+    TrainConfig(
+        name="visualprompt_pi05_realmanpika_umi",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pika_collect_blocks_224_224_visualprompt",  # Need Change
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
     ),
@@ -938,7 +1178,7 @@ _CONFIGS = [
         name="visualprompt_pi05_realmanpika_umi_new",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotRealmanPikaDataConfig(
-            repo_id="Zehao123/pika_collect_blocks_224_224_visualprompt_new",    # Need Change
+            repo_id="Zehao123/pika_collect_blocks_224_224_visualprompt_new",  # Need Change
             base_config=DataConfig(prompt_from_task=True),
             use_tcp_delta_actions=True,
         ),
@@ -951,7 +1191,9 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
     ),
@@ -959,7 +1201,7 @@ _CONFIGS = [
         name="visualprompt_pi05_realmanpika_umi_new_0824",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotRealmanPikaDataConfig(
-            repo_id="Zehao123/pika_collect_blocks_224_224_visualprompt_new_0824",    # Need Change
+            repo_id="Zehao123/pika_collect_blocks_224_224_visualprompt_new_0824",  # Need Change
             base_config=DataConfig(prompt_from_task=True),
             use_tcp_delta_actions=True,
         ),
@@ -972,7 +1214,9 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
     ),
@@ -980,7 +1224,7 @@ _CONFIGS = [
         name="visualprompt_pi05_realmanpika_umi_keypoint_0828",
         model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
         data=LeRobotRealmanPikaDataConfig(
-            repo_id="Zehao123/pika_pull_stick_0827_merged_keypoint_v21",    # Need Change
+            repo_id="Zehao123/pika_pull_stick_0827_merged_keypoint_v21",  # Need Change
             base_config=DataConfig(prompt_from_task=True),
             use_tcp_delta_actions=True,
         ),
@@ -993,9 +1237,182 @@ _CONFIGS = [
         ),
         optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
         ema_decay=0.999,
-        weight_loader=weight_loaders.CheckpointWeightLoader("/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
         pytorch_weight_path="/path/to/your/pytorch_weight_path",
         num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="visualprompt_keypoint_pi05_realmanpika_umi_0829_pullstick_200",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pika_pull_stick_0828_200_keypoint_v21",  # Need Change
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi05_keypoint_pika_pull_stick_1437_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_keypoint_pika_pull_stick_1437_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi05_keypoint_pika_pull_stick_351_0902_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_keypoint_pika_pull_stick_351_0902_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=100_000,
+    ),
+    TrainConfig(
+        name="pi05_keypoint_pika_pull_stick_1_debug_v21",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_keypoint_pika_pull_stick_1_debug_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=1,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1,
+            peak_lr=5e-5,
+            decay_steps=10,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=None,
+        freeze_filter=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ).get_freeze_filter(),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=1,
+        log_interval=1,
+        save_interval=1,
+        keep_period=None,
+    ),
+    TrainConfig(
+        name="pi05_recolor_pika_pull_stick_200_0831_v21",
+        model=pi0_config.Pi0Config(pi05=True, action_horizon=10, discrete_state_input=False),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_recolor_pika_pull_stick_200_0831_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+    ),
+    TrainConfig(
+        name="pi05_recolor_pika_pull_stick_1_debug_0831_v21",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="Zehao123/pi05_recolor_pika_pull_stick_1_debug_0831_v21",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+        ),
+        batch_size=1,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1,
+            peak_lr=5e-5,
+            decay_steps=10,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=None,
+        freeze_filter=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            paligemma_variant="gemma_2b_lora",
+            action_expert_variant="gemma_300m_lora",
+        ).get_freeze_filter(),
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=1,
+        log_interval=1,
+        save_interval=1,
+        keep_period=None,
+        wandb_enabled=False,
     ),
     #
     # Fine-tuning Aloha configs.

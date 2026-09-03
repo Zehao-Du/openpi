@@ -263,9 +263,7 @@ def test_episode_tracker_detects_first_frame_then_tracks_later_frames() -> None:
         calls.append("detect")
         return {name: np.ones(image.shape[:2], dtype=bool) for name, image in images.items()}
 
-    def initialize(
-        images: dict[str, np.ndarray], masks: dict[str, np.ndarray]
-    ) -> dict[str, np.ndarray]:
+    def initialize(images: dict[str, np.ndarray], masks: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
         preprocessor._sessions = {name: object() for name in images}  # noqa: SLF001
         return masks
 
@@ -382,9 +380,7 @@ def test_spatial_prompt_tracker_receives_positive_point_and_box() -> None:
                 "original_sizes": torch.tensor(((10, 10),)),
             }
 
-        def process_new_points_or_boxes_for_video_frame(
-            self, session: _Session, **kwargs: Any
-        ) -> None:
+        def process_new_points_or_boxes_for_video_frame(self, session: _Session, **kwargs: Any) -> None:
             self.prompt_kwargs = kwargs
 
         def post_process_masks(self, *args: Any, **kwargs: Any) -> list[torch.Tensor]:
@@ -402,6 +398,7 @@ def test_spatial_prompt_tracker_receives_positive_point_and_box() -> None:
     preprocessor._torch = torch  # noqa: SLF001
     preprocessor.device = "cpu"
     preprocessor.model_input_size = 224
+    preprocessor.mask_threshold = 0.3
     preprocessor.min_component_area = 1
     preprocessor._sessions = {}  # noqa: SLF001
 

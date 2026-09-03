@@ -1,4 +1,5 @@
 # Data directories.
+artifacts/
 assets/
 checkpoints/
 data/
@@ -173,3 +174,9 @@ Logs/
 # Local task notes
 /TODO
 outputs/
+
+# Job runtime logs.
+/scripts/job_on_qz/**/logs_*.txt
+
+# Core dumps.
+/core.*

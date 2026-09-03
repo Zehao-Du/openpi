@@ -6,11 +6,11 @@ gripper cycles. Every detected cycle becomes one output episode, and its task is
 pre-close wrist-camera frames.
 
 Usage:
-uv run examples/realman_pika/convert_pika_three_grasps_to_lerobot.py \
+uv run examples/realman_pika/collect_block/convert_pika_three_grasps_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824
 
 Validate splitting and color classification without writing a dataset:
-uv run examples/realman_pika/convert_pika_three_grasps_to_lerobot.py \
+uv run examples/realman_pika/collect_block/convert_pika_three_grasps_to_lerobot.py \
     --data-dir /absolute/path/to/collect_blocks_0824 --test-mode
 """
 

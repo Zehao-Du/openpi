@@ -39,8 +39,9 @@ import tyro
 HERE = Path(__file__).resolve().parent
 PARENT = HERE.parent
 sys.path.insert(0, str(PARENT))
+sys.path.insert(0, str(PARENT / "collect_block"))
 spec = importlib.util.spec_from_file_location(
-    "pika_three_grasps_converter", PARENT / "convert_pika_three_grasps_to_lerobot.py"
+    "pika_three_grasps_converter", PARENT / "collect_block" / "convert_pika_three_grasps_to_lerobot.py"
 )
 base = importlib.util.module_from_spec(spec)
 assert spec.loader is not None
@@ -66,6 +67,7 @@ class Args:
     data_dir: Path = DEFAULT_DATA_DIR
     repo_id: str = DEFAULT_REPO_ID
     task_prompt: str = TASK_PROMPT
+    overwrite: bool = False
     rewrite_existing_prompt: bool = False
     rewrite_task_index: int = 0
     max_recordings: int | None = None
@@ -305,12 +307,8 @@ def main(args: Args):
         )
     output = HF_LEROBOT_HOME / args.repo_id
     if output.exists():
-        try:
-            answer = input(f"Output exists: {output}\nOverwrite it? [y/N]: ")
-        except EOFError:
-            return
-        if answer.strip().lower() not in {"y", "yes"}:
-            return
+        if not args.overwrite:
+            raise FileExistsError(f"Output exists: {output}. Pass --overwrite to replace it.")
         shutil.rmtree(output)
     dataset = base._create_dataset(args.repo_id)
     try:
