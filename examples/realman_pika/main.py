@@ -62,6 +62,8 @@ class Args:
     port: int = 8000
     prompt: str = "pick all blocks into the drawer"
     resize_size: int = 224
+    transport_jpeg_quality: int | None = None
+    transport_websocket_deflate: bool = False
     sam3: Sam3RecolorConfig = dataclasses.field(default_factory=Sam3RecolorConfig)
     visual_prompt: Annotated[
         bool,
@@ -294,7 +296,12 @@ def run(args: Args) -> None:
 
     image_preprocessor = None if args.stick else _make_image_preprocessor(args)
     effective_prompt = "pull the stick" if args.stick else args.prompt
-    client = websocket_client_policy.WebsocketClientPolicy(args.host, args.port)
+    client = websocket_client_policy.WebsocketClientPolicy(
+        args.host,
+        args.port,
+        jpeg_quality=args.transport_jpeg_quality,
+        websocket_compression="deflate" if args.transport_websocket_deflate else None,
+    )
     logging.info("Policy server metadata: %s", client.get_server_metadata())
     robot = _create_robot(args)
     executed_steps = 0
