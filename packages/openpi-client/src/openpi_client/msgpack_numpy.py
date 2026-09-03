@@ -13,9 +13,34 @@ that it falls back to pickle for object arrays.
 """
 
 import functools
+import io
 
 import msgpack
 import numpy as np
+from PIL import Image
+
+
+_JPEG_ARRAY_KEY = b"__openpi_jpeg_array__"
+
+
+def encode_jpeg_images(obj, quality: int):
+    """Replace RGB uint8 arrays with JPEG payloads while preserving their dimensions."""
+    if not 1 <= quality <= 100:
+        raise ValueError(f"JPEG quality must be between 1 and 100, got {quality}")
+    if isinstance(obj, np.ndarray) and obj.dtype == np.uint8 and obj.ndim == 3 and obj.shape[-1] == 3:
+        buffer = io.BytesIO()
+        Image.fromarray(obj, mode="RGB").save(buffer, format="JPEG", quality=quality, subsampling=0)
+        return {
+            _JPEG_ARRAY_KEY: True,
+            b"data": buffer.getvalue(),
+        }
+    if isinstance(obj, dict):
+        return {key: encode_jpeg_images(value, quality) for key, value in obj.items()}
+    if isinstance(obj, list):
+        return [encode_jpeg_images(value, quality) for value in obj]
+    if isinstance(obj, tuple):
+        return tuple(encode_jpeg_images(value, quality) for value in obj)
+    return obj
 
 
 def pack_array(obj):
@@ -41,6 +66,9 @@ def pack_array(obj):
 
 
 def unpack_array(obj):
+    if _JPEG_ARRAY_KEY in obj:
+        with Image.open(io.BytesIO(obj[b"data"])) as image:
+            return np.asarray(image.convert("RGB"), dtype=np.uint8).copy()
     if b"__ndarray__" in obj:
         return np.ndarray(buffer=obj[b"data"], dtype=np.dtype(obj[b"dtype"]), shape=obj[b"shape"])
 

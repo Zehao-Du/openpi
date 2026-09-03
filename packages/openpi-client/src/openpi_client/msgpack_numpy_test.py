@@ -43,3 +43,21 @@ def test_pack_unpack(data):
     packed = msgpack_numpy.packb(data)
     unpacked = msgpack_numpy.unpackb(packed)
     tree.map_structure(_check, data, unpacked)
+
+
+def test_jpeg_image_transport_preserves_dimensions_and_reduces_payload() -> None:
+    image = np.zeros((224, 224, 3), dtype=np.uint8)
+    image[..., 0] = 30
+    image[..., 1] = 100
+    image[..., 2] = 220
+    data = {"image": image, "state": np.arange(7, dtype=np.float32)}
+
+    raw_payload = msgpack_numpy.packb(data)
+    jpeg_payload = msgpack_numpy.packb(msgpack_numpy.encode_jpeg_images(data, quality=90))
+    restored = msgpack_numpy.unpackb(jpeg_payload)
+
+    assert restored["image"].shape == image.shape
+    assert restored["image"].dtype == np.uint8
+    assert np.abs(restored["image"].astype(np.int16) - image.astype(np.int16)).max() <= 2
+    np.testing.assert_array_equal(restored["state"], data["state"])
+    assert len(jpeg_payload) < len(raw_payload) / 5

@@ -39,7 +39,7 @@ class WebsocketPolicyServer:
             self._handler,
             self._host,
             self._port,
-            compression=None,
+            compression="deflate",
             max_size=None,
             process_request=_health_check,
         ) as server:
@@ -49,7 +49,9 @@ class WebsocketPolicyServer:
         logger.info(f"Connection from {websocket.remote_address} opened")
         packer = msgpack_numpy.Packer()
 
-        await websocket.send(packer.pack(self._metadata))
+        metadata = dict(self._metadata)
+        metadata["_openpi_transport"] = {"jpeg_images": True, "websocket_deflate": True}
+        await websocket.send(packer.pack(metadata))
 
         prev_total_time = None
         while True:
