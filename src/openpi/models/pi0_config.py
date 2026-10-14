@@ -95,9 +95,9 @@ class Pi0Config(_model.BaseModelConfig):
                 tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
             )
             if self.use_grounding_aux:
-                # Two supervision channels (target / reference object mask) per camera. Fake datasets
-                # generate random labels from this spec, which is enough to smoke-test the aux path.
-                grounding_spec = jax.ShapeDtypeStruct([batch_size, *_model.IMAGE_RESOLUTION, 2], jnp.float32)
+                # Single supervision channel (active visual prompt referent) per camera. Fake
+                # datasets generate random labels from this spec, enough to smoke-test the aux path.
+                grounding_spec = jax.ShapeDtypeStruct([batch_size, *_model.IMAGE_RESOLUTION, 1], jnp.float32)
                 observation_spec = dataclasses.replace(
                     observation_spec,
                     grounding_masks=dict.fromkeys(self.image_keys, grounding_spec),

@@ -27,10 +27,11 @@ def _parse_image(image) -> np.ndarray:
 
 
 def _decode_grounding_bitmask(bitmask) -> np.ndarray:
-    """Decodes a (..., H, W) uint8 grounding bitmask into (..., H, W, 2) float supervision maps.
+    """Decodes a (..., H, W) uint8 grounding bitmask into (..., H, W, 1) float supervision maps.
 
-    Bit layout: bit0 target foreground, bit1 target unlabeled, bit2 reference foreground,
-    bit3 reference unlabeled. Decoded channel values: 1 foreground, 0 background, -1 unlabeled.
+    The single channel means "what the currently active visual prompt refers to" (pick frames:
+    the highlighted object; place frames: the release marker). Bit layout: bit0 foreground,
+    bit1 unlabeled. Decoded values: 1 foreground, 0 background, -1 unlabeled.
     Accepts the raw 2D map or an image-feature layout (CHW / HWC, uint8 or float in [0, 1]).
     """
     bits = np.asarray(bitmask)
@@ -39,12 +40,9 @@ def _decode_grounding_bitmask(bitmask) -> np.ndarray:
         bits = np.moveaxis(bits, 0, -1)  # CHW -> HWC
     if bits.ndim == 3:  # replicated-channel image feature: all channels carry the same bitmask
         bits = bits[..., 0]
-    channels = []
-    for fg_bit, unlabeled_bit in ((0, 1), (2, 3)):
-        fg = (bits >> fg_bit) & 1
-        unlabeled = (bits >> unlabeled_bit) & 1
-        channels.append(np.where(unlabeled, -1.0, fg).astype(np.float32))
-    return np.stack(channels, axis=-1)
+    fg = (bits >> 0) & 1
+    unlabeled = (bits >> 1) & 1
+    return np.where(unlabeled, -1.0, fg).astype(np.float32)[..., None]
 
 
 def _rotvec_to_quaternion(rotvec: np.ndarray) -> np.ndarray:

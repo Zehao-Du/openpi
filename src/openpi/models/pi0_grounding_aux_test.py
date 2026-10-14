@@ -33,8 +33,8 @@ def _make_obs(batch: int, cameras: tuple[str, ...], *, with_masks: bool) -> mode
         grounding = {}
         for key in cameras:
             rng, sub = jax.random.split(rng)
-            # Labels in {-1, 0, 1} with two channels.
-            raw = jax.random.randint(sub, (batch, 224, 224, 2), minval=-1, maxval=2)
+            # Labels in {-1, 0, 1}; single channel = "active visual prompt referent".
+            raw = jax.random.randint(sub, (batch, 224, 224, 1), minval=-1, maxval=2)
             grounding[key] = raw.astype(jnp.float32)
     return model_lib.Observation(
         images=images,
@@ -49,7 +49,7 @@ def test_inputs_spec_includes_grounding_masks():
     assert obs.grounding_masks is not None
     assert tuple(obs.grounding_masks) == FOUR_CAMERAS
     for spec in obs.grounding_masks.values():
-        assert spec.shape == (3, 224, 224, 2)
+        assert spec.shape == (3, 224, 224, 1)
 
     obs, _ = _pi0_config.Pi0Config().inputs_spec()
     assert obs.grounding_masks is None
@@ -75,20 +75,20 @@ def test_preprocess_grounding_passthrough_and_aug_lockstep():
     processed = model_lib.preprocess_observation(None, obs, image_keys=FOUR_CAMERAS)
     assert tuple(processed.grounding_masks) == FOUR_CAMERAS
     for key in FOUR_CAMERAS:
-        assert processed.grounding_masks[key].shape == (2, 224, 224, 2)
+        assert processed.grounding_masks[key].shape == (2, 224, 224, 1)
         np.testing.assert_array_equal(np.asarray(processed.grounding_masks[key]), np.asarray(obs.grounding_masks[key]))
 
     # With augmentation, masks keep shape and stay in the label range (crop/rotate only, no jitter).
     processed = model_lib.preprocess_observation(jax.random.key(7), obs, train=True, image_keys=FOUR_CAMERAS)
     for key in FOUR_CAMERAS:
         mask = np.asarray(processed.grounding_masks[key])
-        assert mask.shape == (2, 224, 224, 2)
+        assert mask.shape == (2, 224, 224, 1)
         assert mask.min() >= -1.0 - 1e-5
         assert mask.max() <= 1.0 + 1e-5
 
     # A constant foreground mask stays mostly foreground under the mild spatial aug.
     obs.images.update({k: jnp.zeros((2, 224, 224, 3)) for k in FOUR_CAMERAS})
-    obs = obs.replace(grounding_masks=dict.fromkeys(FOUR_CAMERAS, jnp.ones((2, 224, 224, 2))))
+    obs = obs.replace(grounding_masks=dict.fromkeys(FOUR_CAMERAS, jnp.ones((2, 224, 224, 1))))
     processed = model_lib.preprocess_observation(jax.random.key(7), obs, train=True, image_keys=FOUR_CAMERAS)
     assert float(processed.grounding_masks["base_0_rgb"].mean()) > 0.8
 
@@ -97,7 +97,7 @@ def test_preprocess_grounding_passthrough_and_aug_lockstep():
     obs = obs.replace(
         images={"base_0_rgb": obs.images["base_0_rgb"], "extra_cam": obs.images["base_0_rgb"]},
         image_masks={"base_0_rgb": obs.image_masks["base_0_rgb"], "extra_cam": obs.image_masks["base_0_rgb"]},
-        grounding_masks={"base_0_rgb": obs.grounding_masks["base_0_rgb"], "extra_cam": jnp.ones((1, 224, 224, 2))},
+        grounding_masks={"base_0_rgb": obs.grounding_masks["base_0_rgb"], "extra_cam": jnp.ones((1, 224, 224, 1))},
     )
     processed = model_lib.preprocess_observation(None, obs, image_keys=("base_0_rgb",))
     assert tuple(processed.grounding_masks) == ("base_0_rgb",)
@@ -107,20 +107,20 @@ def test_grounding_aux_head_shape():
     head = GroundingAuxHead(1152, hidden_dim=256, rngs=nnx.Rngs(0))
     feats = jnp.ones((3, 256, 1152), dtype=jnp.float32)
     logits = head(feats)
-    assert logits.shape == (3, 16, 16, 2)
+    assert logits.shape == (3, 16, 16, 1)
     num_params = sum(x.size for x in jax.tree.leaves(nnx.state(head, nnx.Param)))
     assert num_params < 5_000_000  # design constraint: lightweight head
 
 
 def test_downsample_grounding():
-    gt = jnp.ones((1, 224, 224, 2))
+    gt = jnp.ones((1, 224, 224, 1))
     pooled = _downsample_grounding(gt, 16)
-    assert pooled.shape == (1, 16, 16, 2)
+    assert pooled.shape == (1, 16, 16, 1)
     np.testing.assert_allclose(pooled, 1.0, atol=1e-6)
 
     # Checkerboard foreground / unlabeled averages out to ~0 per pooled cell (i.e. ignored).
     checker = jnp.where((jnp.arange(224)[None, :, None, None] + jnp.arange(224)[None, None, :, None]) % 2, 1.0, -1.0)
-    gt = jnp.broadcast_to(checker, (1, 224, 224, 2))
+    gt = jnp.broadcast_to(checker, (1, 224, 224, 1))
     pooled = _downsample_grounding(gt, 16)
     np.testing.assert_allclose(pooled, 0.0, atol=1e-6)
 
@@ -171,10 +171,8 @@ def test_grounding_aux_loss_metrics():
     assert total.shape == (2,)
     assert np.isfinite(np.asarray(total)).all()
     assert set(info) == {
-        "aux/target_mask_loss",
-        "aux/target_mask_iou",
-        "aux/reference_mask_loss",
-        "aux/reference_mask_iou",
+        "aux/vp_mask_loss",
+        "aux/vp_mask_iou",
         "aux/grounding_loss",
         "aux/grounding_lambda",
     }
@@ -186,16 +184,12 @@ def test_grounding_aux_loss_metrics():
 
 def test_decode_grounding_bitmask():
     bitmask = np.zeros((224, 224), dtype=np.uint8)
-    bitmask[10:20, 10:20] = 0b0001  # target foreground
-    bitmask[30:40, 30:40] = 0b0100  # reference foreground
-    bitmask[50:60, 50:60] = 0b1010  # both unlabeled
+    bitmask[10:20, 10:20] = 0b01  # foreground (active prompt referent)
+    bitmask[50:60, 50:60] = 0b10  # unlabeled
     decoded = realman_pika_policy._decode_grounding_bitmask(bitmask)  # noqa: SLF001
-    assert decoded.shape == (224, 224, 2)
+    assert decoded.shape == (224, 224, 1)
     assert decoded.dtype == np.float32
     assert decoded[15, 15, 0] == 1.0
-    assert decoded[15, 15, 1] == 0.0
-    assert decoded[35, 35, 0] == 0.0
-    assert decoded[35, 35, 1] == 1.0
     assert (decoded[55, 55] == -1.0).all()
     assert (decoded[0, 0] == 0.0).all()
 

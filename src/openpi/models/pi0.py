@@ -45,13 +45,15 @@ def make_attn_mask(input_mask, mask_ar):
 
 
 class GroundingAuxHead(nnx.Module):
-    """B1 lightweight decoding head: predicts grounding masks from SigLIP patch features.
+    """B1 lightweight decoding head: predicts the active-visual-prompt mask from tapped features.
 
-    Exists only during training -- its loss shapes the visual features; inference never calls it
-    (see the B1 design doc in the visual_prompt repo).
+    Single output channel: "what the current visual prompt refers to" (pick frames: the
+    highlighted object; place frames: the release marker). Exists only during training -- its
+    loss shapes the visual features; inference never calls it (see the B1 design doc in the
+    visual_prompt repo).
     """
 
-    def __init__(self, input_dim: int, *, hidden_dim: int = 256, num_masks: int = 2, rngs: nnx.Rngs):
+    def __init__(self, input_dim: int, *, hidden_dim: int = 256, num_masks: int = 1, rngs: nnx.Rngs):
         self.proj = nnx.Conv(input_dim, hidden_dim, kernel_size=(1, 1), rngs=rngs)
         self.mask_conv = nnx.Conv(hidden_dim, hidden_dim // 2, kernel_size=(3, 3), padding="SAME", rngs=rngs)
         self.mask_head = nnx.Conv(hidden_dim // 2, num_masks, kernel_size=(1, 1), rngs=rngs)
@@ -62,10 +64,6 @@ class GroundingAuxHead(nnx.Module):
         x = nnx.gelu(self.proj(x))
         x = nnx.gelu(self.mask_conv(x))
         return self.mask_head(x)
-
-
-# Supervision channel names, in order (matches the bitmask layout in the data pipeline).
-GROUNDING_CHANNEL_NAMES = ("target", "reference")
 
 
 def _downsample_grounding(gt: at.Float[at.Array, "b h w c"], grid: int) -> at.Float[at.Array, "b g g c"]:
@@ -365,7 +363,7 @@ class Pi0(_model.BaseModel):
     def _grounding_aux_loss(
         self, feats: dict[str, at.Float[at.Array, "b n c"]], observation: _model.Observation
     ) -> tuple[at.Float[at.Array, " b"] | None, dict[str, at.Array]]:
-        """Per-sample grounding aux loss (sum over supervised cameras/channels) + log metrics."""
+        """Per-sample grounding aux loss (sum over supervised cameras) + log metrics."""
         total = None
         info: dict[str, at.Array] = {}
         for name, gt in observation.grounding_masks.items():
@@ -375,10 +373,8 @@ class Pi0(_model.BaseModel):
             gt_small = _downsample_grounding(gt, logits.shape[1])
             per_channel = _grounding_mask_losses(logits, gt_small)  # [b, c]
             iou = _grounding_mask_iou(logits, gt_small)  # [c]
-            for c in range(per_channel.shape[-1]):
-                key = GROUNDING_CHANNEL_NAMES[c] if c < len(GROUNDING_CHANNEL_NAMES) else f"mask{c}"
-                info[f"aux/{key}_mask_loss"] = jnp.mean(per_channel[:, c])
-                info[f"aux/{key}_mask_iou"] = iou[c]
+            info["aux/vp_mask_loss"] = jnp.mean(per_channel)
+            info["aux/vp_mask_iou"] = iou[0]
             sample_loss = jnp.sum(per_channel, axis=-1)
             total = sample_loss if total is None else total + sample_loss
         if total is None:

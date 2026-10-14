@@ -107,9 +107,10 @@ class Observation(Generic[ArrayT]):
     token_loss_mask: at.Bool[ArrayT, "*b l"] | None = None
 
     # B1 grounding auxiliary labels (train-time only, see the B1 design doc in the visual_prompt repo).
-    # Per-camera supervision maps, keyed like `images`. Channel 0 is the target object mask, channel 1
-    # the reference object mask. Values: 1 = foreground, 0 = background, negative = unlabeled (ignored
-    # by the auxiliary loss). Dimension names must not collide with the image fields' (jaxtyping
+    # Per-camera supervision maps, keyed like `images`. Single channel: "what the currently active
+    # visual prompt refers to" (pick frames: the highlighted object; place frames: the release
+    # marker). Values: 1 = foreground, 0 = background, negative = unlabeled (ignored by the
+    # auxiliary loss). Dimension names must not collide with the image fields' (jaxtyping
     # enforces cross-parameter shape consistency for identically named axes).
     grounding_masks: dict[str, at.Float[ArrayT, "*b gh gw gch"]] | None = None
 
