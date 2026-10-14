@@ -147,15 +147,21 @@ def train_step(
     def loss_fn(
         model: _model.BaseModel, rng: at.KeyArrayLike, observation: _model.Observation, actions: _model.Actions
     ):
-        chunked_loss = model.compute_loss(rng, observation, actions, train=True)
-        return jnp.mean(chunked_loss)
+        if hasattr(model, "compute_loss_with_aux"):
+            chunked_loss, aux_info = model.compute_loss_with_aux(rng, observation, actions, train=True)
+        else:
+            chunked_loss = model.compute_loss(rng, observation, actions, train=True)
+            aux_info = {}
+        return jnp.mean(chunked_loss), aux_info
 
     train_rng = jax.random.fold_in(rng, state.step)
     observation, actions = batch
 
     # Filter out frozen params.
     diff_state = nnx.DiffState(0, config.trainable_filter)
-    loss, grads = nnx.value_and_grad(loss_fn, argnums=diff_state)(model, train_rng, observation, actions)
+    (loss, aux_info), grads = nnx.value_and_grad(loss_fn, argnums=diff_state, has_aux=True)(
+        model, train_rng, observation, actions
+    )
 
     params = state.params.filter(config.trainable_filter)
     updates, new_opt_state = state.tx.update(grads, state.opt_state, params)
@@ -187,6 +193,7 @@ def train_step(
         "loss": loss,
         "grad_norm": optax.global_norm(grads),
         "param_norm": optax.global_norm(kernel_params),
+        **aux_info,
     }
     return new_state, info
 
@@ -238,7 +245,9 @@ def main(config: _config.TrainConfig):
     logging.info(f"Initialized train state:\n{training_utils.array_tree_to_info(train_state.params)}")
 
     if resuming:
-        train_state = _checkpoints.restore_state(checkpoint_manager, train_state, data_loader)
+        train_state = _checkpoints.restore_state(
+            checkpoint_manager, train_state, data_loader, state_sharding=train_state_sharding
+        )
 
     ptrain_step = jax.jit(
         functools.partial(train_step, config),
@@ -269,7 +278,10 @@ def main(config: _config.TrainConfig):
             infos = []
         batch = next(data_iter)
 
-        if (step % config.save_interval == 0 and step > start_step) or step == config.num_train_steps - 1:
+        if config.save_interval > 0 and (
+            (step % config.save_interval == 0 and step > start_step)
+            or step == config.num_train_steps - 1
+        ):
             _checkpoints.save_state(checkpoint_manager, train_state, data_loader, step)
 
     logging.info("Waiting for checkpoint manager to finish")

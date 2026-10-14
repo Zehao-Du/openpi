@@ -29,12 +29,26 @@ class Pi0Config(_model.BaseModelConfig):
     # - the state input is part of the discrete language tokens rather than a continuous input that is part of the suffix
     # - the action expert uses adaRMSNorm to inject the flow matching timestep
     pi05: bool = False
+    image_keys: tuple[str, ...] = _model.IMAGE_KEYS
     # This config option is not used directly by the model, but it is read by the ModelTransformFactory.
     discrete_state_input: bool = None  # type: ignore
+
+    # B1 grounding auxiliary head (train-time only, dropped at inference; see the B1 design doc in
+    # the visual_prompt repo). The head decodes grounding masks from SigLIP features and its loss
+    # is added to the flow-matching loss with weight `grounding_aux_lambda`.
+    use_grounding_aux: bool = False
+    # SigLIP encoder block (0-based, depth 27) whose patch features feed the auxiliary head.
+    grounding_aux_layer: int = 20
+    # Weight of the auxiliary mask loss added to the flow loss.
+    grounding_aux_lambda: float = 0.05
+    # Hidden width of the lightweight auxiliary decoding head (<1M params).
+    grounding_aux_hidden_dim: int = 256
 
     pytorch_compile_mode: str | None = "max-autotune"
 
     def __post_init__(self):
+        if not self.image_keys or len(set(self.image_keys)) != len(self.image_keys):
+            raise ValueError("image_keys must be nonempty and unique")
         if self.max_token_len is None:
             object.__setattr__(self, "max_token_len", 200 if self.pi05 else 48)
         if self.discrete_state_input is None:
@@ -67,20 +81,20 @@ class Pi0Config(_model.BaseModelConfig):
 
         with at.disable_typechecking():
             observation_spec = _model.Observation(
-                images={
-                    "base_0_rgb": image_spec,
-                    "left_wrist_0_rgb": image_spec,
-                    "right_wrist_0_rgb": image_spec,
-                },
-                image_masks={
-                    "base_0_rgb": image_mask_spec,
-                    "left_wrist_0_rgb": image_mask_spec,
-                    "right_wrist_0_rgb": image_mask_spec,
-                },
+                images=dict.fromkeys(self.image_keys, image_spec),
+                image_masks=dict.fromkeys(self.image_keys, image_mask_spec),
                 state=jax.ShapeDtypeStruct([batch_size, self.action_dim], jnp.float32),
                 tokenized_prompt=jax.ShapeDtypeStruct([batch_size, self.max_token_len], jnp.int32),
                 tokenized_prompt_mask=jax.ShapeDtypeStruct([batch_size, self.max_token_len], bool),
             )
+            if self.use_grounding_aux:
+                # Two supervision channels (target / reference object mask) per camera. Fake datasets
+                # generate random labels from this spec, which is enough to smoke-test the aux path.
+                grounding_spec = jax.ShapeDtypeStruct([batch_size, *_model.IMAGE_RESOLUTION, 2], jnp.float32)
+                observation_spec = dataclasses.replace(
+                    observation_spec,
+                    grounding_masks=dict.fromkeys(self.image_keys, grounding_spec),
+                )
         action_spec = jax.ShapeDtypeStruct([batch_size, self.action_horizon, self.action_dim], jnp.float32)
 
         return observation_spec, action_spec

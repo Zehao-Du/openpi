@@ -106,6 +106,13 @@ class Observation(Generic[ArrayT]):
     # Token loss mask (for FAST autoregressive model).
     token_loss_mask: at.Bool[ArrayT, "*b l"] | None = None
 
+    # B1 grounding auxiliary labels (train-time only, see the B1 design doc in the visual_prompt repo).
+    # Per-camera supervision maps, keyed like `images`. Channel 0 is the target object mask, channel 1
+    # the reference object mask. Values: 1 = foreground, 0 = background, negative = unlabeled (ignored
+    # by the auxiliary loss). Dimension names must not collide with the image fields' (jaxtyping
+    # enforces cross-parameter shape consistency for identically named axes).
+    grounding_masks: dict[str, at.Float[ArrayT, "*b gh gw gch"]] | None = None
+
     @classmethod
     def from_dict(cls, data: at.PyTree[ArrayT]) -> "Observation[ArrayT]":
         """This method defines the mapping between unstructured data (i.e., nested dict) to the structured Observation format."""
@@ -126,6 +133,7 @@ class Observation(Generic[ArrayT]):
             tokenized_prompt_mask=data.get("tokenized_prompt_mask"),
             token_ar_mask=data.get("token_ar_mask"),
             token_loss_mask=data.get("token_loss_mask"),
+            grounding_masks=data.get("grounding_masks"),
         )
 
     def to_dict(self) -> at.PyTree[ArrayT]:
@@ -159,8 +167,15 @@ def preprocess_observation(
     batch_shape = observation.state.shape[:-1]
 
     out_images = {}
+    grounding_in = observation.grounding_masks
+    out_grounding = {} if grounding_in is not None else None
     for key in image_keys:
         image = observation.images[key]
+        grounding = None
+        if grounding_in is not None and key in grounding_in:
+            grounding = grounding_in[key]
+            if grounding.shape[1:3] != image_resolution:
+                grounding = image_tools.resize_with_pad(grounding, *image_resolution)
         if image.shape[1:3] != image_resolution:
             logger.info(f"Resizing image {key} from {image.shape[1:3]} to {image_resolution}")
             image = image_tools.resize_with_pad(image, *image_resolution)
@@ -169,24 +184,34 @@ def preprocess_observation(
             # Convert from [-1, 1] to [0, 1] for augmax.
             image = image / 2.0 + 0.5
 
-            transforms = []
+            spatial_transforms = []
             if "wrist" not in key:
                 height, width = image.shape[1:3]
-                transforms += [
+                spatial_transforms += [
                     augmax.RandomCrop(int(width * 0.95), int(height * 0.95)),
                     augmax.Resize(width, height),
                     augmax.Rotate((-5, 5)),
                 ]
-            transforms += [
+            transforms = [
+                *spatial_transforms,
                 augmax.ColorJitter(brightness=0.3, contrast=0.4, saturation=0.5),
             ]
+            # Reuse RNG and geometry for each original/recolor pair. The "wrist"
+            # condition above also applies to its corresponding *_recolor key.
             sub_rngs = jax.random.split(rng, image.shape[0])
             image = jax.vmap(augmax.Chain(*transforms))(sub_rngs, image)
+
+            if grounding is not None and spatial_transforms:
+                # Keep grounding labels geometrically aligned with the image: same crop/rotate
+                # parameters (drawn from the same sub-rngs), skipping the photometric jitter.
+                grounding = jax.vmap(augmax.Chain(*spatial_transforms))(sub_rngs, grounding)
 
             # Back to [-1, 1].
             image = image * 2.0 - 1.0
 
         out_images[key] = image
+        if grounding is not None:
+            out_grounding[key] = grounding
 
     # obtain mask
     out_masks = {}
@@ -205,6 +230,7 @@ def preprocess_observation(
         tokenized_prompt_mask=observation.tokenized_prompt_mask,
         token_ar_mask=observation.token_ar_mask,
         token_loss_mask=observation.token_loss_mask,
+        grounding_masks=out_grounding,
     )
 
 

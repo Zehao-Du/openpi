@@ -26,6 +26,27 @@ def _parse_image(image) -> np.ndarray:
     return image
 
 
+def _decode_grounding_bitmask(bitmask) -> np.ndarray:
+    """Decodes a (..., H, W) uint8 grounding bitmask into (..., H, W, 2) float supervision maps.
+
+    Bit layout: bit0 target foreground, bit1 target unlabeled, bit2 reference foreground,
+    bit3 reference unlabeled. Decoded channel values: 1 foreground, 0 background, -1 unlabeled.
+    Accepts the raw 2D map or an image-feature layout (CHW / HWC, uint8 or float in [0, 1]).
+    """
+    bits = np.asarray(bitmask)
+    bits = np.rint(255.0 * bits).astype(np.uint8) if np.issubdtype(bits.dtype, np.floating) else bits.astype(np.uint8)
+    if bits.ndim == 3 and bits.shape[0] in (1, 2, 3) and bits.shape[-1] not in (1, 2, 3):
+        bits = np.moveaxis(bits, 0, -1)  # CHW -> HWC
+    if bits.ndim == 3:  # replicated-channel image feature: all channels carry the same bitmask
+        bits = bits[..., 0]
+    channels = []
+    for fg_bit, unlabeled_bit in ((0, 1), (2, 3)):
+        fg = (bits >> fg_bit) & 1
+        unlabeled = (bits >> unlabeled_bit) & 1
+        channels.append(np.where(unlabeled, -1.0, fg).astype(np.float32))
+    return np.stack(channels, axis=-1)
+
+
 def _rotvec_to_quaternion(rotvec: np.ndarray) -> np.ndarray:
     """Convert rotation vectors to unit quaternions in xyzw order."""
     rotvec = np.asarray(rotvec, dtype=np.float64)
@@ -77,7 +98,9 @@ def _validate_tcp_shapes(state: np.ndarray, actions: np.ndarray) -> None:
     if state.shape[-1] < 7 or actions.shape[-1] < 7:
         raise ValueError(f"TCP state/action must have at least 7 dimensions, got {state.shape} and {actions.shape}")
     if actions.ndim != state.ndim + 1 or actions.shape[:-2] != state.shape[:-1]:
-        raise ValueError(f"Expected actions shape (..., horizon, dim) for state (..., dim), got {actions.shape} and {state.shape}")
+        raise ValueError(
+            f"Expected actions shape (..., horizon, dim) for state (..., dim), got {actions.shape} and {state.shape}"
+        )
 
 
 @dataclasses.dataclass(frozen=True)
@@ -103,9 +126,7 @@ class DeltaTcpActions(transforms.DataTransformFn):
 
         world_position_delta = actions[..., :3] - current_position[..., np.newaxis, :]
         actions[..., :3] = _rotate_vector(current_quaternion_inv[..., np.newaxis, :], world_position_delta)
-        relative_quaternion = _quaternion_multiply(
-            current_quaternion_inv[..., np.newaxis, :], target_quaternion
-        )
+        relative_quaternion = _quaternion_multiply(current_quaternion_inv[..., np.newaxis, :], target_quaternion)
         actions[..., 3:6] = _quaternion_to_rotvec(relative_quaternion)
         data["actions"] = actions
         return data
@@ -130,9 +151,7 @@ class AbsoluteTcpActions(transforms.DataTransformFn):
         actions[..., :3] = current_position[..., np.newaxis, :] + _rotate_vector(
             current_quaternion[..., np.newaxis, :], actions[..., :3]
         )
-        target_quaternion = _quaternion_multiply(
-            current_quaternion[..., np.newaxis, :], relative_quaternion
-        )
+        target_quaternion = _quaternion_multiply(current_quaternion[..., np.newaxis, :], relative_quaternion)
         actions[..., 3:6] = _quaternion_to_rotvec(target_quaternion)
         data["actions"] = actions
         return data
@@ -150,36 +169,39 @@ class RealmanPikaInputs(transforms.DataTransformFn):
     # Determines which model will be used.
     # Do not change this for your own dataset.
     model_type: _model.ModelType
+    include_original_images: bool = False
 
     def __call__(self, data: dict) -> dict:
-        # Possibly need to parse images to uint8 (H,W,C) since LeRobot automatically
-        # stores as float32 (C,H,W), gets skipped for policy inference.
-        # Keep this for your own dataset, but if your dataset stores the images
-        # in a different key than "observation/image" or "observation/wrist_image",
-        # you should change it below.
-        # Pi0 models support three image inputs at the moment: one third-person view,
-        # and two wrist views (left and right). If your dataset does not have a particular type
-        # of image, e.g. wrist images, you can comment it out here and replace it with zeros like we do for the
-        # right wrist image below.
-        base_image = _parse_image(data["observation/image"])
-        wrist_image = _parse_image(data["observation/wrist_image"])
-
-        # Create inputs dict. Do not change the keys in the dict below.
-        inputs = {
-            "state": data["observation/state"],
-            "image": {
+        if self.include_original_images:
+            camera_sources = {
+                "base_0_rgb": "observation/image_original",
+                "left_wrist_0_rgb": "observation/wrist_image_original",
+                "base_0_rgb_recolor": "observation/image",
+                "left_wrist_0_rgb_recolor": "observation/wrist_image",
+            }
+            missing = set(camera_sources.values()) - data.keys()
+            if missing:
+                raise ValueError(f"Four-camera inputs missing keys: {sorted(missing)}")
+            images = {key: _parse_image(data[source]) for key, source in camera_sources.items()}
+            masks = dict.fromkeys(camera_sources, np.True_)
+        else:
+            base_image = _parse_image(data["observation/image"])
+            images = {
                 "base_0_rgb": base_image,
-                "left_wrist_0_rgb": wrist_image,
-                # Pad any non-existent images with zero-arrays of the appropriate shape.
+                "left_wrist_0_rgb": _parse_image(data["observation/wrist_image"]),
                 "right_wrist_0_rgb": np.zeros_like(base_image),
-            },
-            "image_mask": {
+            }
+            masks = {
                 "base_0_rgb": np.True_,
                 "left_wrist_0_rgb": np.True_,
-                # We only mask padding images for pi0 model, not pi0-FAST. Do not change this for your own dataset.
-                "right_wrist_0_rgb": np.True_ if self.model_type == _model.ModelType.PI0_FAST else np.False_,
-            },
-        }
+                "right_wrist_0_rgb": np.bool_(self.model_type == _model.ModelType.PI0_FAST),
+            }
+        inputs = {"state": data["observation/state"], "image": images, "image_mask": masks}
+
+        # B1 grounding auxiliary labels (training data only; absent at inference). The dataset stores
+        # a per-frame uint8 bitmask; supervise the original (non-recolor) base camera.
+        if "grounding_mask" in data:
+            inputs["grounding_masks"] = {"base_0_rgb": _decode_grounding_bitmask(data["grounding_mask"])}
 
         # Pad actions to the model action dimension. Keep this for your own dataset.
         # Actions are only available during training.
