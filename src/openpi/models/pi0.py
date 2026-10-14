@@ -169,12 +169,21 @@ class Pi0(_model.BaseModel):
         # B1 grounding auxiliary head (train-time only; see the B1 design doc in the visual_prompt repo).
         self.grounding_aux_layer = config.grounding_aux_layer
         self.grounding_aux_lambda = config.grounding_aux_lambda
+        self.grounding_aux_source = config.grounding_aux_source
         self.grounding_aux_head = None
         if config.use_grounding_aux:
-            siglip_config = _siglip.decode_variant("So400m/14")
-            self.grounding_aux_head = GroundingAuxHead(
-                siglip_config["width"], hidden_dim=config.grounding_aux_hidden_dim, rngs=rngs
-            )
+            if config.grounding_aux_source == "llm_prefix":
+                if not 0 <= config.grounding_aux_layer < paligemma_config.depth:
+                    raise ValueError(
+                        f"grounding_aux_layer={config.grounding_aux_layer} out of range for "
+                        f"llm trunk depth {paligemma_config.depth}"
+                    )
+                # Taps Gemma trunk hidden states, which are language-conditioned via the fully
+                # bidirectional prefix block; feature width equals the trunk width.
+                input_dim = paligemma_config.width
+            else:
+                input_dim = _siglip.decode_variant("So400m/14")["width"]
+            self.grounding_aux_head = GroundingAuxHead(input_dim, hidden_dim=config.grounding_aux_hidden_dim, rngs=rngs)
 
         # This attribute gets automatically set by model.train() and model.eval().
         self.deterministic = True
@@ -304,16 +313,21 @@ class Pi0(_model.BaseModel):
 
         # one big forward pass of prefix + suffix at once
         use_grounding_aux = train and self.grounding_aux_head is not None and observation.grounding_masks is not None
+        tap_llm = use_grounding_aux and self.grounding_aux_source == "llm_prefix"
         prefix_tokens, prefix_mask, prefix_ar_mask, grounding_feats = self.embed_prefix(
-            observation, collect_grounding_feats=use_grounding_aux
+            observation, collect_grounding_feats=use_grounding_aux and not tap_llm
         )
         suffix_tokens, suffix_mask, suffix_ar_mask, adarms_cond = self.embed_suffix(observation, x_t, time)
         input_mask = jnp.concatenate([prefix_mask, suffix_mask], axis=1)
         ar_mask = jnp.concatenate([prefix_ar_mask, suffix_ar_mask], axis=0)
         attn_mask = make_attn_mask(input_mask, ar_mask)
         positions = jnp.cumsum(input_mask, axis=1) - 1
-        (prefix_out, suffix_out), _ = self.PaliGemma.llm(
-            [prefix_tokens, suffix_tokens], mask=attn_mask, positions=positions, adarms_cond=[None, adarms_cond]
+        (prefix_out, suffix_out), _, captured_prefix = self.PaliGemma.llm(
+            [prefix_tokens, suffix_tokens],
+            mask=attn_mask,
+            positions=positions,
+            adarms_cond=[None, adarms_cond],
+            capture_prefix_at=self.grounding_aux_layer if tap_llm else None,
         )
         v_t = self.action_out_proj(suffix_out[:, -self.action_horizon :])
 
@@ -321,12 +335,32 @@ class Pi0(_model.BaseModel):
         if not use_grounding_aux:
             return flow_loss, {}
 
+        if tap_llm:
+            grounding_feats = self._slice_llm_prefix_feats(captured_prefix, observation)
         aux_loss, aux_info = self._grounding_aux_loss(grounding_feats, observation)
         if aux_loss is None:
             return flow_loss, {}
         # Broadcast the per-sample aux loss over the action horizon so that the mean taken by the
         # training loop yields `mean(flow) + lambda * mean(aux)`.
         return flow_loss + (self.grounding_aux_lambda * aux_loss)[..., None], aux_info
+
+    def _slice_llm_prefix_feats(
+        self, captured: at.Float[at.Array, "b s d"], observation: _model.Observation
+    ) -> dict[str, at.Float[at.Array, "b n d"]]:
+        """Slice captured prefix hidden states into per-camera image-token spans.
+
+        ``embed_prefix`` lays out the prefix as [cam0 256 | cam1 256 | ... | text], with each
+        camera contributing the SigLIP patch grid ((224/14)**2 = 256) tokens in ``obs.images``
+        order, so the spans are static.
+        """
+        tokens_per_image = (_model.IMAGE_RESOLUTION[0] // 14) ** 2  # SigLIP So400m/14 patch grid
+        feats = {}
+        offset = 0
+        for name in observation.images:
+            feats[name] = captured[:, offset : offset + tokens_per_image]
+            offset += tokens_per_image
+        assert offset <= captured.shape[1], "prefix shorter than the image token spans"
+        return feats
 
     def _grounding_aux_loss(
         self, feats: dict[str, at.Float[at.Array, "b n c"]], observation: _model.Observation
@@ -374,7 +408,7 @@ class Pi0(_model.BaseModel):
         prefix_tokens, prefix_mask, prefix_ar_mask, _ = self.embed_prefix(observation)
         prefix_attn_mask = make_attn_mask(prefix_mask, prefix_ar_mask)
         positions = jnp.cumsum(prefix_mask, axis=1) - 1
-        _, kv_cache = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
+        _, kv_cache, _ = self.PaliGemma.llm([prefix_tokens, None], mask=prefix_attn_mask, positions=positions)
 
         def step(carry):
             x_t, time = carry
@@ -398,7 +432,7 @@ class Pi0(_model.BaseModel):
             # `positions` is shape (b, suffix_len) indicating the positions of the suffix tokens
             positions = jnp.sum(prefix_mask, axis=-1)[:, None] + jnp.cumsum(suffix_mask, axis=-1) - 1
 
-            (prefix_out, suffix_out), _ = self.PaliGemma.llm(
+            (prefix_out, suffix_out), _, _ = self.PaliGemma.llm(
                 [None, suffix_tokens],
                 mask=full_attn_mask,
                 positions=positions,

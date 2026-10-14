@@ -396,11 +396,7 @@ class LeRobotRealmanPikaDataConfig(DataConfigFactory):
                             if self.include_original_images
                             else {}
                         ),
-                        **(
-                            {"grounding_mask": "grounding_mask"}
-                            if self.include_grounding_masks
-                            else {}
-                        ),
+                        **({"grounding_mask": "grounding_mask"} if self.include_grounding_masks else {}),
                         "observation/state": "state",
                         "actions": "actions",
                         "prompt": "prompt",
@@ -1513,6 +1509,39 @@ _CONFIGS = [
             paligemma_variant="dummy",
             action_expert_variant="dummy",
             use_grounding_aux=True,
+        ),
+        data=FakeDataConfig(),
+        batch_size=2,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1,
+            peak_lr=5e-5,
+            decay_steps=10,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=None,
+        weight_loader=weight_loaders.NoOpWeightLoader(),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=2,
+        log_interval=1,
+        save_interval=2,
+        keep_period=None,
+        wandb_enabled=False,
+    ),
+    # B1 v2: same smoke test but tapping the Gemma trunk (language-conditioned image-token hidden
+    # states) instead of SigLIP. Dummy gemma has depth 4, so tap after block 2.
+    TrainConfig(
+        name="pi05_lirui_vp_groundingaux_llmtap_fake_debug",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            image_keys=("base_0_rgb", "left_wrist_0_rgb", "base_0_rgb_recolor", "left_wrist_0_rgb_recolor"),
+            paligemma_variant="dummy",
+            action_expert_variant="dummy",
+            use_grounding_aux=True,
+            grounding_aux_source="llm_prefix",
+            grounding_aux_layer=2,
         ),
         data=FakeDataConfig(),
         batch_size=2,

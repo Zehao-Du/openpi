@@ -1,5 +1,5 @@
 import dataclasses
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 import flax.nnx as nnx
 import jax
@@ -34,10 +34,17 @@ class Pi0Config(_model.BaseModelConfig):
     discrete_state_input: bool = None  # type: ignore
 
     # B1 grounding auxiliary head (train-time only, dropped at inference; see the B1 design doc in
-    # the visual_prompt repo). The head decodes grounding masks from SigLIP features and its loss
-    # is added to the flow-matching loss with weight `grounding_aux_lambda`.
+    # the visual_prompt repo). The head decodes grounding masks from intermediate visual features
+    # and its loss is added to the flow-matching loss with weight `grounding_aux_lambda`.
     use_grounding_aux: bool = False
-    # SigLIP encoder block (0-based, depth 27) whose patch features feed the auxiliary head.
+    # Which features feed the head:
+    #  - "siglip_block": SigLIP encoder block output (pure vision, gradient stays in the vision tower).
+    #  - "llm_prefix": Gemma trunk prefix (image-token) hidden states -- language-conditioned via
+    #    the fully bidirectional prefix block, so the head supervises the features the action
+    #    expert actually reads; the aux gradient shapes the whole trunk up to that layer.
+    grounding_aux_source: Literal["siglip_block", "llm_prefix"] = "siglip_block"
+    # Source-dependent layer index (0-based): SigLIP encoder block (depth 27) for "siglip_block",
+    # Gemma trunk block (depth 18) for "llm_prefix".
     grounding_aux_layer: int = 20
     # Weight of the auxiliary mask loss added to the flow loss.
     grounding_aux_lambda: float = 0.05
