@@ -367,6 +367,11 @@ class LeRobotRealmanPikaDataConfig(DataConfigFactory):
     # B1: pass the per-frame grounding bitmask column (written by the visual_prompt dataset builder)
     # through to the model as auxiliary supervision labels.
     include_grounding_masks: bool = False
+    # Dataset column feeding the left-wrist image slot. The dual-cam VP datasets store the fisheye
+    # aux camera as "image_fisheye" instead of "wrist_image".
+    wrist_source_key: str = "wrist_image"
+    # Also pass the fisheye grounding bitmask ("grounding_mask_fisheye") for the aux stream.
+    include_fisheye_grounding: bool = False
 
     @override
     def create(self, assets_dirs: pathlib.Path, model_config: _model.BaseModelConfig) -> DataConfig:
@@ -374,6 +379,8 @@ class LeRobotRealmanPikaDataConfig(DataConfigFactory):
             expected_keys = {"base_0_rgb", "left_wrist_0_rgb", "base_0_rgb_recolor", "left_wrist_0_rgb_recolor"}
             if set(getattr(model_config, "image_keys", ())) != expected_keys:
                 raise ValueError("Four-camera RealmanPika data requires the matching four model image_keys")
+        if self.include_fisheye_grounding and not self.include_grounding_masks:
+            raise ValueError("include_fisheye_grounding requires include_grounding_masks")
         # The repack transform is *only* applied to the data coming from the dataset,
         # and *not* during inference. We can use it to make inputs from the dataset look
         # as close as possible to those coming from the inference environment (e.g. match the keys).
@@ -387,7 +394,7 @@ class LeRobotRealmanPikaDataConfig(DataConfigFactory):
                 _transforms.RepackTransform(
                     {
                         "observation/image": "image",
-                        "observation/wrist_image": "wrist_image",
+                        "observation/wrist_image": self.wrist_source_key,
                         **(
                             {
                                 "observation/image_original": "image_original",
@@ -396,7 +403,18 @@ class LeRobotRealmanPikaDataConfig(DataConfigFactory):
                             if self.include_original_images
                             else {}
                         ),
-                        **({"grounding_mask": "grounding_mask"} if self.include_grounding_masks else {}),
+                        **(
+                            {
+                                "grounding_mask": "grounding_mask",
+                                **(
+                                    {"grounding_mask_fisheye": "grounding_mask_fisheye"}
+                                    if self.include_fisheye_grounding
+                                    else {}
+                                ),
+                            }
+                            if self.include_grounding_masks
+                            else {}
+                        ),
                         "observation/state": "state",
                         "actions": "actions",
                         "prompt": "prompt",
@@ -1560,6 +1578,122 @@ _CONFIGS = [
         save_interval=2,
         keep_period=None,
         wandb_enabled=False,
+    ),
+    # ===== Dual-cam VP + B1 grounding aux: pika blocks 89 eps (0824 collection) =====
+    # Dataset: lirui_dualcamvp_gaux_blocks_89_pi05 (visual_prompt builder, --grounding-masks).
+    # Two-camera mode: base_0_rgb = depth-camera VP (turbo pick / green place disk),
+    # left_wrist_0_rgb = fisheye VP (red recolor pick / drawer region place), right_wrist unused.
+    # Grounding aux supervises BOTH VP streams (aux/grounding_loss = sum over the two cameras).
+    TrainConfig(
+        name="pi05_lirui_dualcamvp_gaux_blocks_89",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            use_grounding_aux=True,  # B1 v1: tap SigLIP block 20 (pure-vision feature source)
+        ),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="lirui_dualcamvp_gaux_blocks_89_pi05",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+            wrist_source_key="image_fisheye",
+            include_grounding_masks=True,
+            include_fisheye_grounding=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+        save_interval=5_000,
+        keep_period=10_000,
+    ),
+    # Same data, alternative B1 feature source: language-conditioned Gemma trunk (v2 tap, layer 12
+    # of depth 18). Compare aux/vp_mask_iou against the siglip config to pick the main variant.
+    TrainConfig(
+        name="pi05_lirui_dualcamvp_gaux_blocks_89_llmtap",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            use_grounding_aux=True,
+            grounding_aux_source="llm_prefix",
+            grounding_aux_layer=12,
+        ),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="lirui_dualcamvp_gaux_blocks_89_pi05",
+            # Share the norm stats computed for the main config (identical state/action columns).
+            assets=AssetsConfig(assets_dir="./assets/pi05_lirui_dualcamvp_gaux_blocks_89"),
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+            wrist_source_key="image_fisheye",
+            include_grounding_masks=True,
+            include_fisheye_grounding=True,
+        ),
+        batch_size=256,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=10_000,
+            peak_lr=5e-5,
+            decay_steps=1_000_000,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=0.999,
+        weight_loader=weight_loaders.CheckpointWeightLoader(
+            "/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/foundation_models/pi05/pi05_libero/params"
+        ),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=30_000,
+        save_interval=5_000,
+        keep_period=10_000,
+    ),
+    # Local debug (AGENTS.md: every new config must pass a debug run on this machine first):
+    # real dualcam test dataset (5 eps, vp_out/test5/test_dualcam_5ep) + dummy gemma, 2 steps,
+    # no checkpoint writes. Exercises repack -> dual grounding decode -> aux loss wiring.
+    TrainConfig(
+        name="pi05_lirui_dualcamvp_gaux_blocks_89_debug",
+        model=pi0_config.Pi0Config(
+            pi05=True,
+            action_horizon=10,
+            discrete_state_input=False,
+            paligemma_variant="dummy",
+            action_expert_variant="dummy",
+            use_grounding_aux=True,
+        ),
+        data=LeRobotRealmanPikaDataConfig(
+            repo_id="test_dualcam_5ep",
+            base_config=DataConfig(prompt_from_task=True),
+            use_tcp_delta_actions=True,
+            wrist_source_key="image_fisheye",
+            include_grounding_masks=True,
+            include_fisheye_grounding=True,
+        ),
+        batch_size=4,
+        lr_schedule=_optimizer.CosineDecaySchedule(
+            warmup_steps=1,
+            peak_lr=5e-5,
+            decay_steps=10,
+            decay_lr=5e-5,
+        ),
+        optimizer=_optimizer.AdamW(clip_gradient_norm=1.0),
+        ema_decay=None,
+        weight_loader=weight_loaders.NoOpWeightLoader(),
+        pytorch_weight_path="/path/to/your/pytorch_weight_path",
+        num_train_steps=2,
+        log_interval=1,
+        save_interval=0,
+        keep_period=None,
+        wandb_enabled=False,
+        num_workers=2,
     ),
     TrainConfig(
         name="pi05_lirui_depthvp_blocks_1_debug",

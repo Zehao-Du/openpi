@@ -1,0 +1,28 @@
+#!/bin/bash
+# 同 pi05_lirui_dualcamvp_gaux_blocks_89/train,仅把 B1 特征源换成 Gemma 主干(llm_prefix,layer 12)。
+# norm stats 与主配置共享(assets/pi05_lirui_dualcamvp_gaux_blocks_89/),若主配置未跑过,本 job 会补齐。
+/bin/bash -lc '
+set -eo pipefail
+WP=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/lirui/visual_prompt \
+&& cd $WP/third_party/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export PYTHONPATH=$PWD/src \
+&& export HF_LEROBOT_HOME=$WP/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& export XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 \
+&& ConfigName=pi05_lirui_dualcamvp_gaux_blocks_89_llmtap \
+&& LogName=pi05_lirui_dualcamvp_gaux_blocks_89_llmtap \
+&& DatasetDir=${HF_LEROBOT_HOME}/lirui_dualcamvp_gaux_blocks_89_pi05 \
+&& NormStatsFile=assets/pi05_lirui_dualcamvp_gaux_blocks_89/lirui_dualcamvp_gaux_blocks_89_pi05/norm_stats.json \
+&& if [ ! -f "${DatasetDir}/meta/info.json" ]; then echo "Missing dataset: ${DatasetDir}" >&2; exit 1; fi \
+&& if [ ! -f "${NormStatsFile}" ]; then uv run --project /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi --no-sync python scripts/compute_norm_stats.py --config-name=${ConfigName}; else echo "Norm stats exists, skip: ${NormStatsFile}"; fi \
+&& mkdir -p Logs/train \
+&& uv run --project /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi --no-sync python scripts/train.py ${ConfigName} \
+--exp-name=${LogName} \
+--fsdp-devices=8 \
+--num-workers=8 \
+--overwrite \
+2>&1 | tee Logs/train/${LogName}.log
+'

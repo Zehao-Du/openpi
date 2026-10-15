@@ -1,0 +1,33 @@
+#!/bin/bash
+# 8 卡 pi0.5 双相机 visual prompt + B1 grounding aux 训练(depth VP + 鱼眼 VP,grounding 双路监督)。
+# fork 代码在 visual_prompt/third_party/openpi(B1 分支在此,zechao/openpi 无 B1 提交),
+# 依赖环境复用 zehao/openpi 的 uv venv(--no-sync 不改动它),PYTHONPATH 指向 fork src。
+# 数据集 lirui_dualcamvp_gaux_blocks_89_pi05 由 visual_prompt/scripts/build_blocks_dualcam.sh 生成。
+#
+# 用法: 交 job 直接运行本文件(B1 siglip tap 主干)。llmtap 变体见同级目录 ..._llmtap/train。
+# 本地 debug 版: visual_prompt/scripts/train_blocks_dualcam.sh 1
+/bin/bash -lc '
+set -eo pipefail
+WP=/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/lirui/visual_prompt \
+&& cd $WP/third_party/openpi \
+&& source /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/miniconda3/etc/profile.d/conda.sh \
+&& conda activate zehao_openpi \
+&& export PATH="/inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/uv-bin:$PATH" \
+&& export PYTHONPATH=$PWD/src \
+&& export HF_LEROBOT_HOME=$WP/dataset/lerobot \
+&& export WANDB_MODE=offline \
+&& export XLA_PYTHON_CLIENT_MEM_FRACTION=0.9 \
+&& ConfigName=pi05_lirui_dualcamvp_gaux_blocks_89 \
+&& LogName=pi05_lirui_dualcamvp_gaux_blocks_89 \
+&& DatasetDir=${HF_LEROBOT_HOME}/lirui_dualcamvp_gaux_blocks_89_pi05 \
+&& NormStatsFile=assets/${ConfigName}/lirui_dualcamvp_gaux_blocks_89_pi05/norm_stats.json \
+&& if [ ! -f "${DatasetDir}/meta/info.json" ]; then echo "Missing dataset: ${DatasetDir}" >&2; exit 1; fi \
+&& if [ ! -f "${NormStatsFile}" ]; then uv run --project /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi --no-sync python scripts/compute_norm_stats.py --config-name=${ConfigName}; else echo "Norm stats exists, skip: ${NormStatsFile}"; fi \
+&& mkdir -p Logs/train \
+&& uv run --project /inspire/hdd/project/robot-dna/baojiachun-CZXS25130063/zehao/openpi --no-sync python scripts/train.py ${ConfigName} \
+--exp-name=${LogName} \
+--fsdp-devices=8 \
+--num-workers=8 \
+--overwrite \
+2>&1 | tee Logs/train/${LogName}.log
+'

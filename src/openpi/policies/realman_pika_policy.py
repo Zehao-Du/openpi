@@ -200,6 +200,12 @@ class RealmanPikaInputs(transforms.DataTransformFn):
         # a per-frame uint8 bitmask; supervise the original (non-recolor) base camera.
         if "grounding_mask" in data:
             inputs["grounding_masks"] = {"base_0_rgb": _decode_grounding_bitmask(data["grounding_mask"])}
+            # Dual-cam VP datasets carry a second bitmask for the aux (fisheye) stream; supervise
+            # the wrist slot with it so both visual prompts get grounding supervision.
+            if "grounding_mask_fisheye" in data and "left_wrist_0_rgb" in images:
+                inputs["grounding_masks"]["left_wrist_0_rgb"] = _decode_grounding_bitmask(
+                    data["grounding_mask_fisheye"]
+                )
 
         # Pad actions to the model action dimension. Keep this for your own dataset.
         # Actions are only available during training.
